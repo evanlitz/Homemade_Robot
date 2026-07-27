@@ -1,0 +1,83 @@
+<!--
+  SCREEN-ONLY MODEL. See DECISIONS.md D7.
+
+  Same mechanism, closed with <equality><joint> instead of <connect>.
+
+  PERMITTED USE   reachability, workspace coverage, cycle time -- kinematic
+                  questions only, and every output labelled SCREEN-ONLY.
+  FORBIDDEN USE   any force, torque, or part-sizing question. There is no tie
+                  rod in this model, so tie-rod tension and passive-pivot
+                  reactions do not exist in it. Evan is machining the links and
+                  buying the bearings off these numbers.
+
+  Identical bodies, identical masses, identical geometry to
+  parallelogram_connect.xml. The ONLY difference is the equality block.
+
+  Instead of pinning the coupler's lower end to the crank's tip, this couples
+  the joint ANGLES algebraically:
+
+      j_rocker   =  j_crank      (the two grounded links stay parallel)
+      j_coupler  = -j_crank      (the coupler holds world orientation)
+
+  <joint> equality is scalar and non-redundant, so this is numerically
+  better behaved and cheaper than <connect>: 2 rows instead of 3, no
+  redundant row, no residual gap at a pin because there is no pin.
+
+  WHAT IT DOES NOT DO
+    There is no tie rod. The coupler's lower end is attached to nothing, so
+    no force flows from the coupler into the crank tip. The solver instead
+    applies abstract generalised torques to satisfy the angle relations.
+
+    The kinematics are correct. The STATICS ARE NOT THE SAME MECHANISM.
+
+    Measured (DECISIONS.md F3): actuator torque is reproduced EXACTLY, which
+    is forced -- equal configuration manifolds imply equal generalised force,
+    so agreement there proves nothing. connect reports 3.495 N of real rod
+    tension; this model reports 1.747 N.m of abstract generalised torque.
+    Different quantity, different units, no rod.
+-->
+<mujoco model="parallelogram_jointeq">
+  <option timestep="0.001" gravity="0 0 -9.81" integrator="implicitfast" solver="Newton"
+          iterations="100" tolerance="1e-12"/>
+
+  <default>
+    <!-- see parallelogram_connect.xml for why collision is off here -->
+    <geom type="capsule" size="0.015" density="800" rgba="0.6 0.6 0.65 1"
+          contype="0" conaffinity="0"/>
+    <joint type="hinge" axis="0 1 0" damping="0.05"/>
+    <site type="sphere" size="0.012" rgba="1 0.3 0.1 1"/>
+  </default>
+
+  <worldbody>
+    <geom type="capsule" fromto="0 0 0.60  0 0 0.80" size="0.02" rgba="0.3 0.3 0.3 1"
+          contype="0" conaffinity="0"/>
+
+    <body name="crank" pos="0 0 0.60">
+      <joint name="j_crank"/>
+      <geom fromto="0 0 0  0.50 0 0"/>
+      <site name="cut_a" pos="0.50 0 0"/>
+    </body>
+
+    <body name="rocker" pos="0 0 0.80">
+      <joint name="j_rocker"/>
+      <geom fromto="0 0 0  0.50 0 0"/>
+
+      <body name="coupler" pos="0.50 0 0">
+        <joint name="j_coupler"/>
+        <geom fromto="0 0 0  0 0 -0.35"/>
+        <site name="cut_b" pos="0 0 -0.20"/>
+        <site name="tool"  pos="0 0 -0.35" rgba="0.1 0.8 0.3 1"/>
+      </body>
+    </body>
+  </worldbody>
+
+  <equality>
+    <!-- polycoef = a0 a1 a2 a3 a4  ->  joint1 = a0 + a1*joint2 + a2*joint2^2 + ... -->
+    <joint joint1="j_rocker"  joint2="j_crank" polycoef="0  1 0 0 0" solref="0.002 1" solimp="0.999 0.9999 0.0001 0.5 2"/>
+    <joint joint1="j_coupler" joint2="j_crank" polycoef="0 -1 0 0 0" solref="0.002 1" solimp="0.999 0.9999 0.0001 0.5 2"/>
+  </equality>
+
+  <actuator>
+    <position name="a_crank" joint="j_crank" kp="800" kv="40" ctrlrange="-1.4 1.4"/>
+  </actuator>
+</mujoco>

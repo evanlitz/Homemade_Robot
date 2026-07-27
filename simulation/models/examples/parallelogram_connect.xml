@@ -1,0 +1,99 @@
+<!--
+  Parallelogram loop closed with <equality><connect>.  RECOMMENDED APPROACH.
+
+  This is a reference example, not a candidate architecture. Geometry is
+  arbitrary. It exists to show the loop-closure mechanism before we commit.
+
+  CONVENTIONS
+    Plane      : xz.  All hinges about +y.  +Z up.
+    Angles     : MJCF-native, parent-relative, right-handed about +y.
+                 Home pose (all qpos = 0) is the closed, rectangular pose.
+    Ground     : two pivots on the world body, A at z=0.60 and B at z=0.80.
+                 Separation d = 0.20 m.
+    Links      : crank A->C and rocker B->D, both length L = 0.50 m.
+                 Coupler hangs off D, length d = 0.20 m to the cut point,
+                 then extends a further 0.15 m to the tool point.
+
+  HOW THE LOOP IS BUILT
+    MuJoCo's body graph is a tree, so the loop is built as a tree with one
+    joint CUT, and the cut is restored by an equality constraint.
+
+      world -+- crank  (hinge j_crank)  -> site cut_a at its tip C
+             |
+             +- rocker (hinge j_rocker) -> coupler (hinge j_coupler)
+                                                   -> site cut_b, tool
+
+    The cut is the pin that would join the coupler's lower end to C.
+    <connect> re-imposes it: the two sites are held coincident, free to
+    rotate relative to each other. That is exactly a revolute pin.
+
+    Tree DOF                    : 3  (j_crank, j_rocker, j_coupler)
+    Rows removed by connect     : 2  (planar; see note below)
+    Mechanism DOF               : 1  -> one actuator, on j_crank.
+
+  CONSTRAINT REDUNDANCY -- read this before trusting the numbers
+    <connect> imposes 3 scalar equations (x, y, z coincidence). This
+    mechanism is planar, so only 2 are independent; the y row is redundant.
+    MuJoCo's solver is regularised and tolerates that, but the redundant row
+    is why the loop residual is not exactly zero and why solimp/solref below
+    are tightened past the defaults. If a redundant row ever causes trouble,
+    the fix is a plane joint or a <connect> restricted by construction --
+    not loosening the constraint.
+
+  SOFTNESS
+    MuJoCo equality constraints are SOFT. The default solref/solimp leave a
+    visible gap at the pin. The values below drive the residual into the
+    micrometre range, which matters here because the accuracy target is
+    +/-5 mm at the tool and a 1 mm modelling artefact is 20% of the budget.
+-->
+<mujoco model="parallelogram_connect">
+  <option timestep="0.001" gravity="0 0 -9.81" integrator="implicitfast" solver="Newton"
+          iterations="100" tolerance="1e-12"/>
+
+  <default>
+    <!-- contype/conaffinity 0: these geoms are inertia and visualisation only.
+         A closed loop puts adjacent bodies in permanent contact -- the coupler's
+         lower end is COINCIDENT with the crank tip by construction, so with
+         collision on, MuJoCo generates a deeply-interpenetrating contact there
+         and pushes the loop apart with hundreds of newtons. Collision geometry
+         for a real architecture goes in a separate group with explicit
+         contype/conaffinity masks that exclude adjacent links. -->
+    <geom type="capsule" size="0.015" density="800" rgba="0.6 0.6 0.65 1"
+          contype="0" conaffinity="0"/>
+    <joint type="hinge" axis="0 1 0" damping="0.05"/>
+    <site type="sphere" size="0.012" rgba="1 0.3 0.1 1"/>
+  </default>
+
+  <worldbody>
+    <geom type="capsule" fromto="0 0 0.60  0 0 0.80" size="0.02" rgba="0.3 0.3 0.3 1"
+          contype="0" conaffinity="0"/>
+
+    <!-- pivot A -->
+    <body name="crank" pos="0 0 0.60">
+      <joint name="j_crank"/>
+      <geom fromto="0 0 0  0.50 0 0"/>
+      <site name="cut_a" pos="0.50 0 0"/>
+    </body>
+
+    <!-- pivot B -->
+    <body name="rocker" pos="0 0 0.80">
+      <joint name="j_rocker"/>
+      <geom fromto="0 0 0  0.50 0 0"/>
+
+      <body name="coupler" pos="0.50 0 0">
+        <joint name="j_coupler"/>
+        <geom fromto="0 0 0  0 0 -0.35"/>
+        <site name="cut_b" pos="0 0 -0.20"/>
+        <site name="tool"  pos="0 0 -0.35" rgba="0.1 0.8 0.3 1"/>
+      </body>
+    </body>
+  </worldbody>
+
+  <equality>
+    <connect site1="cut_a" site2="cut_b" solref="0.002 1" solimp="0.999 0.9999 0.0001 0.5 2"/>
+  </equality>
+
+  <actuator>
+    <position name="a_crank" joint="j_crank" kp="800" kv="40" ctrlrange="-1.4 1.4"/>
+  </actuator>
+</mujoco>
