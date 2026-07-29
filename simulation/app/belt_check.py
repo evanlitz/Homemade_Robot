@@ -66,15 +66,18 @@ def main() -> int:
         torque_at_stage *= stage.ratio * stage_eff
 
     print(f"\nbinding stage: {worst[0]}, limits the joint to {worst[1]:.1f} N.m")
-    rej = gate.rejections(peak_torque_nm=cap, worst_tension_n=0.0, allowable_tension_n=1.0)
     if worst[1] < cap:
         print(f"GATE FAILS: the {cap:.0f} N.m cap needs {cap / worst[1] * 100 - 100:.0f}% more belt "
               f"capacity than the configured belt has.")
     else:
         print(f"GATE PASSES: {worst[1] / cap * 100 - 100:.0f}% margin over the cap.")
 
+    # NOT "same pulleys". At 5 mm pitch HTD and GT3 share the pitch, and so the
+    # pitch diameter and the packaging envelope, but the tooth profiles differ
+    # and are NOT interchangeable -- Gates rates 5MGT-on-HTD-5M as not
+    # recommended. Same blank, different groove toolpath. F10.
     print("\nwhat a profile change to the binding stage would buy "
-          "(same pitch, same pulleys, same envelope):")
+          "(same pitch diameter and envelope, DIFFERENT pulley groove):")
     binding = next(s for s in dt.stages if s.name == worst[0])
     idx = dt.stages.index(binding)
     upstream_torque = tau_motor

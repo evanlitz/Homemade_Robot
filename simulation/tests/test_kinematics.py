@@ -99,7 +99,39 @@ def test_resolution_uses_full_steps_not_microsteps():
 
 def test_limits():
     lo = np.array([j.min_rad for j in CFG.joints])
+    # lo is inside every ABSOLUTE range by construction, and its relative elbow
+    # is lo[2] - lo[1] = -90 deg, inside the +/-150 deg mechanism limit.
     assert within_limits(CFG, lo)
     assert not within_limits(CFG, lo - 0.01)
+    # Three absolute breaches; the relative elbow is unchanged by shifting all
+    # three joints equally, so it does not add a fourth.
     assert len(violations(CFG, lo - 0.01)) == 3
-    assert np.allclose(clamp(CFG, lo - 0.01), lo)
+
+
+def test_relative_elbow_limit_is_enforced_independently_of_absolute():
+    """D19: a pose can satisfy every absolute range and still be a fold the
+    mechanism cannot make.
+
+    The excluded region is the 60 deg band around full doubling-back: relative
+    angles between +150 and +210 deg, which wrap onto each other and are the
+    same physical configuration. The palletizer's absolute ranges alone admit
+    that band, because q2 - q1 reaches -210 deg and -210 wraps to +150.
+
+    Substituting the relative limit FOR the absolute one -- which is what the
+    first D19 attempt did -- raised the survivor count from 7 to 16 by silently
+    discarding the table-clearance limit. Both must apply.
+    """
+    q1, q2 = CFG.joints[1], CFG.joints[2]
+    theta = np.array([0.0, q1.max_rad, -1.9])  # relative -199 deg == +161 deg
+    assert q1.min_rad <= theta[1] <= q1.max_rad, "absolute q1 must be legal"
+    assert q2.min_rad <= theta[2] <= q2.max_rad, "absolute q2 must be legal"
+    assert not within_limits(CFG, theta)
+    assert any("relative to" in v for v in violations(CFG, theta))
+
+    # And a normal working fold is accepted.
+    assert within_limits(CFG, np.array([0.0, 1.0, -0.6]))
+
+
+def test_clamp_refuses_relative_limits_rather_than_guessing():
+    with pytest.raises(NotImplementedError):
+        clamp(CFG, np.array([0.0, 0.0, 0.0]))

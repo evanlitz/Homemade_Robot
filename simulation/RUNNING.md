@@ -64,8 +64,11 @@ Measured runtimes, not estimates. Everything is sub-second except the sweep.
 | `python -m app.show_config palletizer` | 0.1 s | always 0 | Same, for a named config in `config/`. |
 | `python -m app.loop_closure_demo` | 0.2 s | always 0 | Compares `<connect>` vs `<joint>` loop closure on a reference parallelogram. |
 | `python -m app.build_palletizer` | 0.3 s | 1 if any check fails | Regenerates `models/palletizer.xml` and runs six verification checks. |
+| `python -m app.build_scara` | 0.3 s | 1 if any check fails | Regenerates `models/scara.xml` and runs the applicable four checks. Candidate #8. |
 | `python -m app.belt_check` | 0.1 s | **always 0** — see note | Belt tension budget, driver-current cap, standstill dissipation. |
-| `python -m app.sweep` | 1.2 s | 1 if nothing survives | Geometry + board-placement sweep with hard rejection gates. Prints the trade curve. |
+| `python -m app.sweep [name]` | 2.5 s | 1 if nothing survives | Geometry + board-placement sweep with hard rejection gates, for **either** architecture. Defaults to `palletizer`; pass `scara` for candidate #8. Prints the box check, base-clearance cost table, trade curve and acceleration sensitivity. |
+| `python -m app.accel_budget` | 1.1 s | 1 if nothing reaches | Acceleration implied by a 2 s / 4 s / 8 s chess move, and what each costs in torque and belt tension. |
+| `python -m app.yaw_ratio` | 2.4 s | always 0 | Yaw reduction swept independently of the planar joints, against resolution, torque, belt tension, packaging envelope and motor rpm. |
 | `python -m pytest tests/ -q` | 0.3 s | standard pytest | FK/IK property tests. Samples joint space, not Cartesian space. |
 
 **Do not wire `app.belt_check` into CI expecting a non-zero exit.** It currently prints
@@ -74,6 +77,16 @@ disagreement between the torque cap and the belt spec, awaiting a component deci
 is a report, not a test. `app.build_palletizer` and `app.sweep` *are* tests and do exit
 non-zero on failure.
 
+### The comparison
+
+The phase-1 deliverable is these two commands side by side. Same box, same gates, same
+assumptions:
+
+```bash
+python -m app.sweep palletizer
+python -m app.sweep scara
+```
+
 ### Run everything
 
 ```bash
@@ -81,7 +94,9 @@ python -m pytest tests/ -q && \
 python -m app.smoke_test && \
 python -m app.build_palletizer && \
 python -m app.belt_check && \
-python -m app.sweep
+python -m app.sweep && \
+python -m app.accel_budget && \
+python -m app.yaw_ratio
 ```
 
 PowerShell has no `&&`; chain with `;` and check `$?`, or run them one at a time.
@@ -138,6 +153,46 @@ clearance. Geometries violating a gate are **rejected, not ranked**. Prints a re
 census, surviving geometries, and the trade curve.
 
 Exits 1 if nothing survives all gates.
+
+Four blocks worth reading before the trade curve:
+
+- **BOX CHECK** — names any sweep axis whose survivors touch an edge of the swept range.
+  A survivor on an axis minimum means the box is in the wrong place, which is a different
+  failure from a grid being too coarse and is **not** fixed by subdividing.
+- **BASE-COLUMN CLEARANCE** — **ungated**. What each candidate base-column radius would
+  cost. Nothing currently stops the sweep placing the board on top of the machine; see
+  F11 and OPEN-C.
+- **ACCELERATION SENSITIVITY** — peak torque at several acceleration limits. Every torque
+  figure elsewhere is conditional on `max_accel_rad_s2`, which is still a placeholder.
+- The `baseGap` column is distance from the yaw axis to the board **outline**. `0.000`
+  means the axis is inside the board.
+
+### `app.accel_budget`
+Derives an acceleration limit from a cycle-time requirement instead of guessing one.
+Models a chess move as descend / [close] / ascend / traverse / descend / [open] / ascend,
+each segment rest-to-rest on a triangular profile, and solves for the acceleration that
+fits a 2 s, 4 s or 8 s move. Reports the torque and belt tension each choice implies.
+
+Triangular is the fastest rest-to-rest profile under an acceleration limit, so the figures
+are a **floor**, not an estimate — any real profile needs more. Two tables are printed: one
+over all geometries passing the kinematic gates, one over only those clearing the D13 base
+column, because a placement with the board on top of the base has the biggest yaw swings
+and would otherwise set the spec.
+
+### `app.yaw_ratio`
+Sweeps the yaw reduction independently of the planar joints (D15) against the full
+placement grid, rebuilding the MJCF at each ratio so reflected rotor inertia `J_rotor × N²`
+enters the torque properly.
+
+Reports resolution, surviving placements, peak yaw torque, the arm inertia `J_eff` backed
+out of it, the inertia-matching optimum `N* = √(J_eff/J_rotor)`, motor torque against the
+driver-current cap, belt tension, output pulley diameter, folded column envelope and motor
+rpm.
+
+**The base clearance is computed self-consistently**, as `max(D13 radius, the stack's own
+envelope)`. The column houses the stack *and* sets how far out the board must sit, so
+gating a large ratio against the fixed 200 mm would credit it with a gain it cannot
+physically have.
 
 ### `pytest`
 Samples **joint space**, computes `p = FK(θ)`, asserts `IK(p)` recovers `θ`. Sampling

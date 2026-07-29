@@ -28,22 +28,41 @@ pipeline is MuJoCo MJCF with equality constraints throughout.
   changing anything; several entries record traps that produce plausible wrong answers.
 - **[CLAUDE.MD](CLAUDE.MD)** — project brief and working agreement.
 
+## The comparison
+
+Two candidates, same sweep box, same gates, same assumptions including the unvalidated
+ones. `python -m app.sweep palletizer` against `python -m app.sweep scara`. Full detail
+and caveats in F15.
+
+|  | palletizer (#6) | SCARA+Z (#8) |
+|---|---|---|
+| surviving geometries | 7 | 46 |
+| best worst-square resolution | 0.890 mm (17.8% of target) | **0.490 mm (9.8%)** |
+| peak revolute joint torque | 18.8–24.7 N·m | **1.6–3.4 N·m** |
+| of which gravity | 14.6–19.2 N·m | **exactly 0** |
+| worst belt tension vs allowable | 36–47% | **3–6%** |
+| prismatic lift force | n/a | 800 N — see F15, the shared 1:25 assumption is wrong for a linear axis |
+
+These share an unvalidated mass model and are a *relative* comparison, not absolute
+numbers. Both will be superseded by bench data.
+
 ## Status
 
-Phase 1, in progress. One architecture modelled so far.
+Phase 1, in progress. Two architectures modelled; three descoped.
 
 | Area | State |
 |---|---|
 | MuJoCo toolchain | working, verified |
 | Config + placeholder tracking | working |
 | Palletizer model (candidate #6) | built, 6 verification checks pass |
-| `motion/` FK, IK, Jacobian, limits | implemented, property-tested |
+| SCARA+Z model (candidate #8) | built, 4 verification checks pass |
+| `motion/` FK, IK, Jacobian, limits | implemented, property-tested, both candidates |
 | `motion/` trajectory, workspace | **stubs** — signatures and conventions only |
-| `backends/hw_backend` | **empty** — no hardware bought |
-| Geometry + placement sweep | working, gated |
-| Other four candidates | not started (deliberately — see D1) |
+| `backends/hw_backend` | **empty** — single-joint rig parts on order |
+| Geometry + placement sweep | working, gated, runs either candidate |
+| Candidates #1, #5, #7 | **descoped**, not deferred — see D18 |
 
-29 values in `config/palletizer.yaml` are still tagged `!placeholder`. They are marked at
+31 values in `config/palletizer.yaml` are still tagged `!placeholder`. They are marked at
 the value in YAML and enumerated by `python -m app.show_config palletizer`. Nothing
 silently invents a link length, ratio, or limit.
 
@@ -117,6 +136,24 @@ wrong answers rather than obvious failures:
   estimate here was optimistic by ~2×, which changed a component decision.
 - **F8 — measured torque demand is 13.7–25.0 N·m**, well under the 30 N·m that had been
   assumed. Estimates were replaced by measurements as soon as the model could produce them.
+- **F10 — GT3 and HTD do not interchange at 5 mm pitch.** They share the pitch, and so the
+  pitch diameter and the whole packaging envelope, but not the tooth profile. The
+  8M/14M drop-in upgrade is real and does *not* carry down to 5M. Same blank, different
+  groove.
+- **F11 — a sweep range can hide a missing constraint.** The old `board_radius_m` lower
+  bound was acting as a base-clearance gate by accident. Extending the box downward, as the
+  pinned optimum demanded, produced a "best" geometry with the board sitting on the base.
+  Resolution is now the binding gate at 89% of budget, where D5 had recorded it as free.
+- **F13 — the packaging envelope binds before the physics does.** Yaw reduction has a real
+  inertia-matching optimum at `N* = √(J_eff/J_rotor) ≈ 85`, confirmed numerically. It is
+  irrelevant: motor torque never passes 14% of the cap at any ratio, while the output
+  pulley outgrows the base column above 1:25. Resolution then turns around at 1:40 because
+  a bigger column pushes the board outward faster than a finer step pulls travel down.
+- **F14 — a quoted figure was a comparison against the wrong baseline.** The "+30%" cited
+  against SDP/SI's +57% is Gates' own GT3-vs-**GT2** number, not GT3-vs-HTD. Also found
+  while checking: SDP/SI's table requires an extra derate below 1 inch of belt width that
+  the model does not apply, and 25 mm is the widest standard 5MGT belt, so D12's 10% margin
+  is a ceiling rather than a step.
 
 ## Method notes
 
@@ -131,10 +168,14 @@ wrong answers rather than obvious failures:
 
 ## Open items
 
-- **OPEN-B** — the configured torque cap (48 N·m) and the configured belt (HTD-5M, 25 mm,
-  33.7 N·m) disagree. Left deliberately inconsistent and loud; resolving it is a component
-  decision.
+- **OPEN-D — BLOCKING.** Motor torque is modelled as speed-independent. It is not, and the
+  4 s cycle needs 533 rpm at 1:25 and 845 at 1:40, where a NEMA 34 of this class is well
+  down its curve. Every torque and tension result here is an upper bound until a
+  34HS1456 torque-speed curve exists.
+- **OPEN-E** — the yaw stack does not fit the 200 mm column above 1:25. Growing it to
+  244 mm buys yaw 1:40 and takes the binding gate from 89% of budget to 56%. Blocked on
+  OPEN-D, which the higher motor speed makes worse.
 - **OPEN-SAFETY-1** — belt reduction is backdrivable and there is no brake, so cutting
   motor power drops the arm. Does not block the sim; blocks powered hardware.
-- The coarse sweep does not bracket the optimum — the best survivor sits at the minimum of
-  two of four swept axes, so the ranges need extending before any refinement.
+
+*(OPEN-B closed by D12, GT3-5M final stage. OPEN-C closed by D13, 200 mm column.)*

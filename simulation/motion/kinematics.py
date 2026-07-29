@@ -99,5 +99,5 @@ def tool_m_per_full_step(cfg: ArchitectureConfig, theta: JointVector) -> np.ndar
     value at home.
     """
     jac = jacobian(cfg, theta)
-    step = np.array([j.drive.joint_rad_per_full_step(cfg.motor) for j in cfg.joints])
+    step = np.array([j.drive.output_per_full_step(cfg.motor) for j in cfg.joints])
     return np.linalg.norm(jac, axis=0) * step

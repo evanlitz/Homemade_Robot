@@ -127,6 +127,11 @@ def build_mjcf(cfg: ArchitectureConfig) -> str:
     d = cfg.g("tool_drop_m")
     mo = cfg.g("motor_mount_offset_m")
     mm = cfg.motor.mass_kg
+    # From config, not hardcoded: motion.collision needs the same radii to size
+    # clearance, and the link radius also sizes link MASS through the capsule
+    # density. Two copies would drift.
+    rl = cfg.g("link_radius_m")
+    rc = cfg.g("column_radius_m")
 
     eq = 'solref="0.002 1" solimp="0.999 0.9999 0.0001 0.5 2"'
 
@@ -146,7 +151,7 @@ def build_mjcf(cfg: ArchitectureConfig) -> str:
 
   <default>
     <geom type="capsule" density="2700" contype="0" conaffinity="0"
-          size="0.020" rgba="0.62 0.64 0.68 1"/>
+          size="{rl:.6f}" rgba="0.62 0.64 0.68 1"/>
     <joint type="hinge" axis="0 -1 0" damping="0.05"/>
     <site type="sphere" size="0.010" rgba="1 0.35 0.1 1"/>
     <default class="rod">
@@ -158,7 +163,7 @@ def build_mjcf(cfg: ArchitectureConfig) -> str:
   </default>
 
   <worldbody>
-    <geom name="column" type="capsule" fromto="0 0 0  0 0 {h:.6f}" size="0.045"
+    <geom name="column" type="capsule" fromto="0 0 0  0 0 {h:.6f}" size="{rc:.6f}"
           rgba="0.30 0.30 0.32 1"/>
     <!-- yaw motor: grounded, does not rotate, contributes to no DOF -->
     <geom name="motor_yaw" type="box" size="0.043 0.043 0.058"
@@ -167,7 +172,7 @@ def build_mjcf(cfg: ArchitectureConfig) -> str:
     <body name="base" pos="0 0 0">
       <joint name="q0_yaw" type="hinge" axis="0 0 1" damping="0.10"
              armature="{arm_yaw:.6f}"/>
-      <geom name="turret" type="capsule" fromto="0 0 0  0 0 {h:.6f}" size="0.050"
+      <geom name="turret" type="capsule" fromto="0 0 0  0 0 {h:.6f}" size="{rc:.6f}"
             rgba="0.40 0.42 0.46 1"/>
       <!-- both planar drive motors ride the rotating base (hard constraint 1) -->
       <geom name="motor_q1" type="box" size="0.043 0.043 0.058"
@@ -242,6 +247,27 @@ def build_mjcf(cfg: ArchitectureConfig) -> str:
   </actuator>
 </mujoco>
 """
+
+
+def actuated_forces(model, data) -> np.ndarray:
+    """Generalised forces conjugate to the ABSOLUTE actuated coordinates.
+
+    Order matches `cfg.joints`: (q0_yaw, q1_upper_arm, q2_forearm). Units are
+    N.m for all three -- this architecture has no prismatic joint.
+
+    Addressed BY NAME. Indexing `qfrc_inverse[:3]` instead picks up
+    q2_forearm_rel, which is the PASSIVE relative elbow hinge, not the actuated
+    `drive_lever` that the motor turns. All three bodies named here are children
+    of the rotating base, so their joint coordinates are already absolute and no
+    transform is needed -- that is the D2 payoff the model header describes.
+    """
+    import mujoco
+
+    out = []
+    for name in ACTUATED:
+        jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name)
+        out.append(float(data.qfrc_inverse[model.jnt_dofadr[jid]]))
+    return np.array(out)
 
 
 def hinge_values(q0: float, q1a: float, q2a: float) -> dict[str, float]:

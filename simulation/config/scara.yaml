@@ -1,0 +1,195 @@
+# Candidate #8 -- SCARA + Z. DECISIONS.md D18.
+#
+# SCOPE IS DELIBERATELY NARROW. This config exists to produce three numbers on
+# identical terms with the palletizer: coverage, peak joint torque, resolution.
+# There is no torque cap, no belt tension budget, no cycle time and no column
+# study here, and there should not be one until the comparison is read.
+#
+# EVERY SHARED ASSUMPTION IS COPIED FROM palletizer.yaml UNCHANGED, including
+# the ones known to be wrong. Link cross-section, motor mass, the 1:25 drive,
+# efficiency, the board task, the gates. A relative comparison on shared bad
+# assumptions is worth more than an absolute number on tuned ones.
+
+name: scara
+candidate_id: 8
+closed_loop: false
+description: >
+  SCARA + Z. 3 DOF: two revolute joints about vertical axes plus a prismatic
+  lift. Both revolute motors ride the lift carriage, coaxial at the shoulder;
+  the elbow is belt-driven along link 1. Open chain -- no equality constraints.
+
+# IDENTICAL to palletizer.yaml.
+motor:
+  part: "Longs 34HS1456 NEMA 34"
+  holding_torque_nm: 8.4
+  current_a_per_phase: 5.6
+  full_step_deg: 1.8
+  mass_kg: 3.8
+  shaft_diameter_m: 0.014
+  rear_shaft: false
+  rotor_inertia_kgm2: 2.7e-4
+  phase_resistance_ohm: 0.55
+
+# IDENTICAL to palletizer.yaml.
+task:
+  board_square_m: 0.057
+  board_span_m: 0.457
+  reach_requirement_m: 0.600
+  accuracy_target_m: 0.005
+
+# IDENTICAL to palletizer.yaml, except that residual_* never fires -- an open
+# chain has no equality constraints and therefore no loop residual. The gate is
+# left in place rather than removed so both configs read the same.
+#
+# joint_torque_cap_nm is D10's number and is UNDER REVIEW (D17). It is copied
+# here so the two candidates are gated identically; it is not a SCARA decision.
+validity:
+  residual_invalid_m: 50.0e-6
+  residual_target_m: 5.0e-6
+  joint_torque_cap_nm: 48.0
+  tool_m_per_full_step_max: 0.0010
+  base_clearance_m: 0.200
+
+# IDENTICAL to palletizer.yaml.
+drive_train:
+  stages:
+    - name: stage1
+      pitch_mm: 5.0
+      driver_teeth: 20
+      driven_teeth: 100
+      width_mm: 15.0
+      profile: HTD-5M
+      centre_distance_mm: 130.0
+    - name: stage2
+      pitch_mm: 5.0
+      driver_teeth: 20
+      driven_teeth: 100
+      width_mm: 25.0
+      profile: GT3-5M
+      centre_distance_mm: 130.0
+  rating_n_per_inch:
+    HTD-5M: 454.0
+    HTD-8M: 792.0
+    GT3-5M: 712.0
+    GT3-8M: 1690.0
+
+# PLACEHOLDER -- assembly seed only, link lengths swept per D9.
+#   lift_home_m       carriage height at q2_lift = 0, above the table.
+#   column_height_m   fixed column the carriage rides on.
+#   tool_drop_m       gripper reach below the forearm plane. Same value as the
+#                     palletizer so the board sits at the same z in both.
+geometry:
+  # IDENTICAL to palletizer.yaml. See the note there.
+  link_radius_m: !placeholder 0.020
+  column_radius_m: !placeholder 0.050
+  upper_arm_m: !placeholder 0.40
+  forearm_m: !placeholder 0.35
+  # Carriage height at q2_lift = 0, i.e. the LOWEST position. Set so the TCP at
+  # d = 0 sits on the board surface: lift_home - tool_drop = 0.020 = grip height.
+  # Any other value just shifts the required lift range and is not a design
+  # choice; getting it wrong puts every square outside the lift limits, which is
+  # how the first run rejected all 432 geometries on coverage.
+  lift_home_m: !placeholder 0.12
+  column_height_m: !placeholder 0.60
+  tool_drop_m: !placeholder 0.10
+
+# IDENTICAL to palletizer.yaml.
+gripper:
+  piece_diameter_m: 0.032
+  jaw_span_open_m: !placeholder 0.044
+  jaw_thickness_m: !placeholder 0.006
+  body_width_m: !placeholder 0.050
+  grip_height_m: !placeholder 0.020
+  travel_height_m: !placeholder 0.120
+  actuation_s: !placeholder 0.250
+
+# IDENTICAL RANGES to palletizer.yaml, so the two candidates are searched over
+# the same box. Same coarseness, same step count, same 432 evaluations.
+sweep:
+  upper_arm_m:      {min: 0.15, max: 0.55, steps: 6}
+  forearm_m:        {min: 0.25, max: 0.50, steps: 4}
+  board_radius_m:   {min: 0.15, max: 0.70, steps: 6}
+  board_yaw_rad:    {min: 0.0,  max: 0.785398, steps: 3}
+
+# max_vel / max_accel are D14's derived values, copied so both candidates are
+# accelerated identically. They were derived on the palletizer's joint
+# displacements; re-deriving them for SCARA is cycle-time work and D18 puts that
+# out of scope. Using the palletizer's numbers is the conservative choice for a
+# COMPARISON -- it cannot flatter SCARA.
+#
+# JOINT LIMITS, revised under D19. The previous +/-180 deg were placeholders and
+# they inflated this candidate's coverage. Same rule as palletizer.yaml:
+#
+#   * any joint the gripper cable crosses gets +/-150 deg of travel;
+#   * an ELBOW's limit is RELATIVE to its parent, because its travel is a
+#     property of the mechanism.
+#
+# +/-150 deg is also what industrial SCARAs of this size actually publish for
+# J1 and J2. There is no table and no gravity to limit these joints, so cable
+# routing and the elbow belt ARE the constraint -- the shoulder cannot spin
+# freely because the gripper's power and signal lines cross it, and there is no
+# slip ring in this design.
+#
+# Link-against-link and link-against-column interference is NOT encoded here. It
+# is computed geometrically per pose by motion.collision and gated by the sweep,
+# for both candidates, which is strictly better than an invented angle.
+#
+# q2_lift limits are METRES of carriage travel, not radians.
+joints:
+  - name: q0_shoulder
+    min_rad: -2.6180   # -150 deg, gripper cable routing
+    max_rad: 2.6180
+    max_vel_rad_s: 2.23
+    max_accel_rad_s2: 4.01
+    drive: &belt_2stage
+      kind: belt_2stage
+      reduction: 25.0
+      microsteps: !placeholder 16
+      efficiency: !placeholder 0.90
+  # No absolute constraint exists on a horizontal-plane forearm's heading, so
+  # the absolute range stays wide and the +/-150 deg ELBOW limit does the work.
+  - name: q1_forearm
+    min_rad: -3.1416
+    max_rad: 3.1416
+    relative_to: q0_shoulder
+    rel_min_rad: -2.6180
+    rel_max_rad: 2.6180
+    max_vel_rad_s: 2.23
+    max_accel_rad_s2: 4.01
+    drive: *belt_2stage
+  # Prismatic. min/max are METRES; vel/accel are m/s and m/s^2.
+  #
+  # SPECIFIED under D19 item 3, replacing the 1:25-belt-on-a-100mm-lead
+  # placeholder that produced F15's misleading 800 N. Direct-driven 32 mm lead
+  # ball screw (SFU3232 class), no reduction. Scored by `python -m app.z_drive`:
+  #
+  #   lead    reflected   motor torque   rpm    mm/full step
+  #    5 mm    426 kg       0.919 N.m    5486      0.025
+  #   10 mm    107 kg       0.657 N.m    2743      0.050
+  #   20 mm     27 kg       0.723 N.m    1371      0.100
+  #   32 mm     10 kg       0.965 N.m     857      0.160   <-- specified
+  #
+  # WHAT PICKS THE LEAD IS SPEED, NOT RESOLUTION. Every row above is far inside
+  # the 1 mm/full-step budget. 32 mm is the only stock lead that lifts the
+  # carriage fast enough for D14's cycle while staying under ~1000 motor rpm,
+  # which OPEN-D says is already generous. It is also the closest inertia match
+  # (10.4 kg reflected against 12.5 kg of real carriage).
+  #
+  # BACKDRIVABLE, and that is not fixable. A self-locking trapezoidal screw
+  # needs a lead near 5 mm, which would need 6857 rpm. So this axis requires a
+  # fail-safe brake -- OPEN-SAFETY-1 on a different axis. Recorded as a real
+  # cost of this candidate, not designed around.
+  #
+  # vel/accel are DERIVED, not placeholders: a 100 mm hop on a triangular
+  # profile in 0.438 s, four hops per move, half of D14's 3.5 s motion budget.
+  - name: q2_lift
+    min_rad: !placeholder 0.0
+    max_rad: !placeholder 0.25
+    max_vel_rad_s: 0.46
+    max_accel_rad_s2: 2.09
+    drive:
+      kind: ballscrew
+      reduction: 1.0
+      microsteps: !placeholder 16
+      efficiency: !placeholder 0.90
+      lead_m_per_rev: 0.032

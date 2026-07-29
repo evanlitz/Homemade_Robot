@@ -85,7 +85,7 @@
 
   <default>
     <geom type="capsule" density="2700" contype="0" conaffinity="0"
-          size="0.020" rgba="0.62 0.64 0.68 1"/>
+          size="0.020000" rgba="0.62 0.64 0.68 1"/>
     <joint type="hinge" axis="0 -1 0" damping="0.05"/>
     <site type="sphere" size="0.010" rgba="1 0.35 0.1 1"/>
     <default class="rod">
@@ -97,7 +97,7 @@
   </default>
 
   <worldbody>
-    <geom name="column" type="capsule" fromto="0 0 0  0 0 0.450000" size="0.045"
+    <geom name="column" type="capsule" fromto="0 0 0  0 0 0.450000" size="0.050000"
           rgba="0.30 0.30 0.32 1"/>
     <!-- yaw motor: grounded, does not rotate, contributes to no DOF -->
     <geom name="motor_yaw" type="box" size="0.043 0.043 0.058"
@@ -106,7 +106,7 @@
     <body name="base" pos="0 0 0">
       <joint name="q0_yaw" type="hinge" axis="0 0 1" damping="0.10"
              armature="0.168750"/>
-      <geom name="turret" type="capsule" fromto="0 0 0  0 0 0.450000" size="0.050"
+      <geom name="turret" type="capsule" fromto="0 0 0  0 0 0.450000" size="0.050000"
             rgba="0.40 0.42 0.46 1"/>
       <!-- both planar drive motors ride the rotating base (hard constraint 1) -->
       <geom name="motor_q1" type="box" size="0.043 0.043 0.058"

@@ -28,13 +28,34 @@ def within_limits(cfg: ArchitectureConfig, theta: JointVector) -> bool:
 
 
 def violations(cfg: ArchitectureConfig, theta: JointVector) -> list[str]:
-    """Human-readable description of each limit breach. Empty list if clean."""
+    """Human-readable description of each limit breach. Empty list if clean.
+
+    A joint carrying `relative_to` is checked against the DIFFERENCE from the
+    named joint, wrapped to (-pi, pi]. That is how an elbow's travel is actually
+    constrained: by the mechanism, not by where the arm happens to point. See
+    JointSpec.relative_to.
+    """
+    values = np.asarray(theta, dtype=float)
+    index = {j.name: i for i, j in enumerate(cfg.joints)}
     out = []
-    for joint, value in zip(cfg.joints, np.asarray(theta, dtype=float)):
+    for joint, value in zip(cfg.joints, values):
         if not joint.min_rad <= value <= joint.max_rad:
             out.append(f"{joint.name}={math.degrees(value):.2f} deg outside "
-                       f"[{math.degrees(joint.min_rad):.2f}, {math.degrees(joint.max_rad):.2f}]")
+                       f"[{math.degrees(joint.min_rad):.2f}, "
+                       f"{math.degrees(joint.max_rad):.2f}]")
+        if joint.relative_to is None:
+            continue
+        rel = _wrap(value - values[index[joint.relative_to]])
+        if not joint.rel_min_rad <= rel <= joint.rel_max_rad:
+            out.append(f"{joint.name}={math.degrees(rel):.2f} deg relative to "
+                       f"{joint.relative_to}, outside "
+                       f"[{math.degrees(joint.rel_min_rad):.2f}, "
+                       f"{math.degrees(joint.rel_max_rad):.2f}]")
     return out
+
+
+def _wrap(a: float) -> float:
+    return (a + math.pi) % (2.0 * math.pi) - math.pi
 
 
 def clamp(cfg: ArchitectureConfig, theta: JointVector) -> JointVector:
@@ -44,6 +65,12 @@ def clamp(cfg: ArchitectureConfig, theta: JointVector) -> JointVector:
     somewhere other than commanded. Use for visualisation and for seeding
     solvers; use `within_limits` to decide whether a motion may execute.
     """
+    if any(j.relative_to is not None for j in cfg.joints):
+        raise NotImplementedError(
+            "clamp() has no meaning for a relative limit: bringing the pair "
+            "back into range could move either joint, and choosing silently "
+            "would move the tool somewhere the caller did not ask for. Use "
+            "within_limits to decide whether a pose may execute.")
     lo = np.array([j.min_rad for j in cfg.joints])
     hi = np.array([j.max_rad for j in cfg.joints])
     return np.clip(np.asarray(theta, dtype=float), lo, hi)

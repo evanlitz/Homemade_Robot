@@ -116,23 +116,67 @@ class DriveSpec:
     reduction: float
     microsteps: float  # float, not int, so it can carry a Placeholder marker
     efficiency: float
+    # Set ONLY for a prismatic joint: metres of linear travel per revolution of
+    # the reduction OUTPUT (pulley circumference, or leadscrew lead). Its
+    # presence is what makes this drive linear, so every unit-carrying method
+    # below branches on it rather than on a separate `kind` string that could
+    # disagree with it.
+    lead_m_per_rev: float | None = None
+
+    @property
+    def is_linear(self) -> bool:
+        return self.lead_m_per_rev is not None
+
+    def output_per_full_step(self, motor: MotorSpec) -> float:
+        """Joint output per motor full step. RADIANS if rotary, METRES if linear.
+
+        Mixed units in one return value is deliberate: it is exactly what
+        `||J_column|| * step` needs, because a prismatic Jacobian column is a
+        unit vector and a revolute one carries the moment arm. Callers that
+        multiply by a Jacobian column norm get metres either way.
+        """
+        if self.is_linear:
+            return self.lead_m_per_rev / (motor.full_steps_per_rev * self.reduction)
+        return math.radians(motor.full_step_deg) / self.reduction
 
     def joint_rad_per_full_step(self, motor: MotorSpec) -> float:
+        if self.is_linear:
+            raise ValueError("linear drive: use output_per_full_step, which "
+                             "returns metres")
         return math.radians(motor.full_step_deg) / self.reduction
 
     def joint_torque_limit_nm(self, motor: MotorSpec) -> float:
         return motor.holding_torque_nm * self.reduction * self.efficiency
 
     def reflected_inertia_kgm2(self, motor: MotorSpec) -> float:
-        """Rotor inertia seen at the joint, J_rotor * N^2.
+        """Rotor inertia seen at the joint. MuJoCo `armature` units.
 
-        Scales with the SQUARE of the reduction, so at 1:25 it is 625x the
-        rotor's own figure and comparable to the whole arm's inertia. Omitting
-        it is not a small error -- DECISIONS.md F6.
+        Rotary: J_rotor * N^2, kg.m^2. Scales with the SQUARE of the reduction,
+        so at 1:25 it is 625x the rotor's own figure and comparable to the whole
+        arm's inertia. Omitting it is not a small error -- DECISIONS.md F6.
+
+        Linear: the same energy argument gives a reflected MASS in kg,
+        J_rotor * (2*pi*N/lead)^2, which is what MuJoCo's armature means on a
+        slide joint. The `2*pi/lead` term makes this large for any fine lead --
+        it is not a bug, and it is the same physics F6 is about.
         """
+        if self.is_linear:
+            return motor.rotor_inertia_kgm2 * (
+                2.0 * math.pi * self.reduction / self.lead_m_per_rev) ** 2
         return motor.rotor_inertia_kgm2 * self.reduction**2
 
     def motor_torque_for_joint_nm(self, joint_torque_nm: float) -> float:
+        """Motor-shaft torque for a given joint-side load.
+
+        Linear: the argument is a FORCE in newtons and the screw relation
+        `tau = F * lead / (2*pi * N * eta)` applies. This is the only quantity
+        that compares a prismatic axis with a revolute one honestly -- the
+        generalised force at a fine-lead screw is large and cheap, so quoting
+        newtons next to newton-metres invites exactly the wrong conclusion.
+        """
+        if self.is_linear:
+            return (joint_torque_nm * self.lead_m_per_rev
+                    / (2.0 * math.pi * self.reduction * self.efficiency))
         return joint_torque_nm / (self.reduction * self.efficiency)
 
 
@@ -151,6 +195,21 @@ class JointSpec:
     max_vel_rad_s: float
     max_accel_rad_s2: float
     drive: DriveSpec
+    # An ADDITIONAL constraint, not a replacement. `min_rad`/`max_rad` are
+    # always the absolute, world-referenced limits; when `relative_to` is set,
+    # `rel_min_rad`/`rel_max_rad` also apply to the difference from that joint.
+    # A pose must satisfy BOTH.
+    #
+    # Both exist because they are different physical facts. An elbow's travel is
+    # a property of the mechanism and does not care where the arm points, so it
+    # is relative. A vertical-plane arm's clearance over the table is a property
+    # of the world, so it is absolute. Substituting one for the other loosens
+    # the model in whichever direction the substitution happens to run -- doing
+    # exactly that raised the palletizer's survivor count from 7 to 16 on the
+    # first attempt at D19, by silently discarding its table-clearance limit.
+    relative_to: str | None = None
+    rel_min_rad: float | None = None
+    rel_max_rad: float | None = None
 
     @property
     def range_rad(self) -> tuple[float, float]:
@@ -179,6 +238,7 @@ class ValiditySpec:
     residual_target_m: float
     joint_torque_cap_nm: float
     tool_m_per_full_step_max: float
+    base_clearance_m: float
 
     def verdict(self, residual_m: float) -> str:
         if residual_m > self.residual_invalid_m:
@@ -189,8 +249,12 @@ class ValiditySpec:
                    peak_torque_nm: float | None = None,
                    worst_resolution_m: float | None = None,
                    worst_tension_n: float | None = None,
-                   allowable_tension_n: float | None = None) -> list[str]:
+                   allowable_tension_n: float | None = None,
+                   board_gap_m: float | None = None) -> list[str]:
         out: list[str] = []
+        if board_gap_m is not None and board_gap_m < self.base_clearance_m:
+            out.append(f"base clearance {board_gap_m * 1000:.0f} mm < "
+                       f"{self.base_clearance_m * 1000:.0f} mm")
         if residual_m is not None and residual_m > self.residual_invalid_m:
             out.append(f"residual {residual_m * 1e6:.1f} um > "
                        f"{self.residual_invalid_m * 1e6:.0f} um")
@@ -257,6 +321,9 @@ class ArchitectureConfig:
                 max_vel_rad_s=d["max_vel_rad_s"],
                 max_accel_rad_s2=d["max_accel_rad_s2"],
                 drive=DriveSpec(**d["drive"]),
+                relative_to=d.get("relative_to"),
+                rel_min_rad=d.get("rel_min_rad"),
+                rel_max_rad=d.get("rel_max_rad"),
             )
             for d in raw["joints"]
         )
