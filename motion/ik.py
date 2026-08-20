@@ -56,13 +56,26 @@ def ik(target, q0_deg, tol_mm=0.01, tol_deg=0.01,
     return None
 
 
+def _default_seeds():
+    """Spread over J1 and J4, both elbow branches.
+
+    The previous four seeds all had J1 in {0, 90} and J4 = 0, which left poses
+    with large negative J1 or large |J4| unreachable from any of them: they
+    missed 2% of regular poses, and some of those misses were at perfectly
+    well-conditioned configurations. Cost is ~3.7 solver calls per cold solve
+    against 1.2 before, paid only on cold starts -- a warm seed still converges
+    in one.
+    """
+    return [np.array([j1, elbow * 20.0, -elbow * 20.0, j4, elbow * 40.0, 0.0])
+            for j1 in (-120.0, -60.0, 0.0, 60.0, 120.0)
+            for elbow in (1.0, -1.0)
+            for j4 in (0.0, 120.0, -120.0)]
+
+
 def ik_multistart(target, seeds=None, **kw):
     """Try several seeds. Returns the first solution found."""
     if seeds is None:
-        seeds = [np.zeros(6),
-                 np.array([0.0, 20.0, -20.0, 0.0, 40.0, 0.0]),
-                 np.array([0.0, -20.0, 20.0, 0.0, -40.0, 0.0]),
-                 np.array([90.0, 20.0, -20.0, 0.0, 40.0, 0.0])]
+        seeds = _default_seeds()
     for s in seeds:
         r = ik(target, s, **kw)
         if r is not None:

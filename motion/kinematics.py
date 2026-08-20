@@ -1,9 +1,16 @@
 """Forward kinematics for the AR4, modified (Craig) DH convention.
 
-Verified against Annin's compiled robot_kinematics module to 1.6e-4 mm
-across 2000 random poses spanning the full joint range.
+Verified against Annin's compiled robot_kinematics module; see tests/ for the
+pose count and tolerance actually asserted.
 
 Transform per link:  H = Rx(alpha) . Tx(a) . Rz(theta) . Tz(d)
+
+alpha6 is -90, NOT the 180 that robot_set() in the HMI's kinematics.cpp
+installs. With 180 the J6 axis comes out exactly antiparallel to J5 at every
+configuration, so the Jacobian is rank 5 everywhere and the arm cannot control
+orientation. defaults.json, robot_data_reset(), and the URDF joint axes all
+agree on -90; robot_set() is a stale fallback that aligns to the 3D model's
+link-6 mesh frame. See tests/test_wrist_rank.py.
 """
 import numpy as np
 
@@ -14,7 +21,7 @@ DHM = (
     (0.0,        305.0, 0.0,         0.0),
     (-np.pi / 2, 0.0,   0.0,       222.63),
     (np.pi / 2,  0.0,   0.0,         0.0),
-    (np.pi,      0.0,   np.pi,      41.0),
+    (-np.pi / 2, 0.0,   np.pi,      41.0),
 )
 
 # degrees, (lower, upper)
