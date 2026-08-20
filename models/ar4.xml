@@ -1,0 +1,61 @@
+<mujoco model="ar4_mk5">
+  <compiler angle="radian" eulerseq="XYZ" meshdir="meshes/" autolimits="true"/>
+  <option gravity="0 0 -9.81" integrator="implicitfast"/>
+
+  <default>
+    <joint damping="5" armature="0.1"/>
+    <geom type="mesh" rgba="0.75 0.75 0.78 1" density="1200" contype="0" conaffinity="0"/>
+    <position kp="8000" kv="400" forcerange="-1000 1000"/>
+  </default>
+
+  <asset>
+    <mesh name="base_link" file="base_link.STL"/>
+    <mesh name="link_1" file="link_1.STL"/>
+    <mesh name="link_2" file="link_2.STL"/>
+    <mesh name="link_3" file="link_3.STL"/>
+    <mesh name="link_4" file="link_4.STL"/>
+    <mesh name="link_5" file="link_5.STL"/>
+    <mesh name="link_6" file="link_6.STL"/>
+  </asset>
+
+  <worldbody>
+    <light pos="0 0 2" dir="0 0 -1" diffuse="0.8 0.8 0.8"/>
+    <body name="base_link">
+      <geom mesh="base_link"/>
+      <body name="link_1" euler="3.14159265 0 0">
+        <joint name="joint_1" axis="0 0 1" range="-2.96706 2.96706"/>
+        <geom mesh="link_1"/>
+        <body name="link_2" pos="0 0.0642 -0.16977" euler="1.5708 0 -1.5708">
+          <joint name="joint_2" axis="0 0 -1" range="-0.73304 1.57080"/>
+          <geom mesh="link_2"/>
+          <body name="link_3" pos="0 -0.305 0.007" euler="0 0 3.14159265">
+            <joint name="joint_3" axis="0 0 -1" range="-1.55334 0.90757"/>
+            <geom mesh="link_3"/>
+            <body name="link_4" pos="0 0 0" euler="1.5708 0 -1.5708">
+              <joint name="joint_4" axis="0 0 -1" range="-3.14159 3.14159"/>
+              <geom mesh="link_4"/>
+              <body name="link_5" pos="0 0 -0.22263" euler="3.14159265 0 -1.5708">
+                <joint name="joint_5" axis="1 0 0" range="-1.83260 1.83260"/>
+                <geom mesh="link_5"/>
+                <body name="link_6" pos="0 0 0.041" euler="0 0 3.14159265">
+                  <joint name="joint_6" axis="0 0 1" range="-3.14159 3.14159"/>
+                  <geom mesh="link_6"/>
+                  <site name="ee" pos="0 0 0" size="0.005" rgba="1 0 0 1"/>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <position name="a1" joint="joint_1"/>
+    <position name="a2" joint="joint_2"/>
+    <position name="a3" joint="joint_3"/>
+    <position name="a4" joint="joint_4"/>
+    <position name="a5" joint="joint_5"/>
+    <position name="a6" joint="joint_6"/>
+  </actuator>
+</mujoco>
