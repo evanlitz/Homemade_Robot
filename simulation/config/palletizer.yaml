@@ -1,0 +1,208 @@
+# Candidate #6 -- parallelogram palletizer. DECISIONS.md D1.
+#
+# Values tagged `!placeholder` are invented. Untagged values are datasheet
+# facts, task facts, or SETTLED decisions recorded in DECISIONS.md.
+#
+# GEOMETRY IS SWEPT, NOT CHOSEN (D9). The values under `geometry:` are a valid
+# assembly seed -- NOT a design. The sweep is the deliverable.
+
+name: palletizer
+candidate_id: 6
+closed_loop: true
+description: >
+  Parallelogram palletizer. 3 DOF: base yaw plus two grounded planar drives on
+  the rotating base. Tool held level by geometry through two chained levelling
+  parallelograms. No elbow motor.
+
+# REAL -- Longs 34HS1456 vendor datasheets, confirmed by Evan 2026-07-27.
+# 2700 g.cm2 = 2.7e-4 kg.m2. Phase resistance 0.55 ohm supersedes an earlier
+# 0.46 ohm figure; 0.55 is the self-consistent one, since standstill
+# dissipation 2 * 5.6^2 * 0.55 = 34.50 W matches the stated 34.5 W while
+# 0.46 ohm would give 28.85 W. See DECISIONS.md F6.
+motor:
+  part: "Longs 34HS1456 NEMA 34"
+  holding_torque_nm: 8.4
+  current_a_per_phase: 5.6
+  full_step_deg: 1.8
+  mass_kg: 3.8
+  shaft_diameter_m: 0.014
+  rear_shaft: false
+  rotor_inertia_kgm2: 2.7e-4
+  phase_resistance_ohm: 0.55
+
+# REAL -- target task, CLAUDE.md.
+task:
+  board_square_m: 0.057
+  board_span_m: 0.457
+  reach_requirement_m: 0.600
+  accuracy_target_m: 0.005
+
+# HARD GATES. The sweep REJECTS any geometry violating these -- it does not
+# rank them. DECISIONS.md D11.
+#
+#   residual_*                OPEN-A. 1% / 0.1% of the 5 mm accuracy budget.
+#   joint_torque_cap_nm       D10. Driver-current cap, sized to demand+margin,
+#                             NOT to motor capability. See F7 -- the belt spec
+#                             below cannot actually carry this. OPEN-B.
+#   tool_m_per_full_step_max  D5. 1.0 mm = 20% of the 5 mm budget, scored on
+#                             the worst square over the whole board.
+#   base_clearance_m          D13. The board outline must clear the yaw axis by
+#                             this much. The base column houses the yaw
+#                             reduction stack and runs from the table to the
+#                             shoulder, so it occupies this space for the
+#                             board's whole thickness. Was ungated until F11
+#                             found the sweep placing the board on the machine.
+validity:
+  residual_invalid_m: 50.0e-6
+  residual_target_m: 5.0e-6
+  joint_torque_cap_nm: 48.0
+  tool_m_per_full_step_max: 0.0010
+  base_clearance_m: 0.200
+
+# SETTLED D4 (1:25, two-stage belt, even 1:5 x 1:5 split).
+# rating_n_per_inch: manufacturer allowable working tension per 25.4 mm of
+# belt width. Source: SDP/SI Handbook of Timing Belts and Pulleys, Technical
+# Section, Table 3 "Allowable Working Tension of Different Belt Constructions"
+# (neoprene / fibreglass cord). Already includes the 1/15-of-ultimate design
+# factor stated in that document's Section 9. DECISIONS.md F7.
+drive_train:
+  stages:
+    - name: stage1
+      pitch_mm: 5.0
+      driver_teeth: 20
+      driven_teeth: 100
+      width_mm: 15.0
+      profile: HTD-5M
+      centre_distance_mm: 130.0
+    # SETTLED D12. GT3-5M, NOT HTD-5M. At 5 mm pitch these two share the pitch
+    # and therefore the pitch diameter, but NOT the tooth profile -- a 5MGT belt
+    # does not correctly mesh in an HTD-5M groove. The pulley blank is unchanged;
+    # the groove toolpath is not. See F10.
+    - name: stage2
+      pitch_mm: 5.0
+      driver_teeth: 20
+      driven_teeth: 100
+      width_mm: 25.0
+      profile: GT3-5M
+      centre_distance_mm: 130.0
+  rating_n_per_inch:
+    HTD-5M: 454.0
+    HTD-8M: 792.0
+    GT3-5M: 712.0
+    GT3-8M: 1690.0
+
+# PLACEHOLDER -- assembly seed only, swept per D9.
+geometry:
+  # Capsule radii. Were hardcoded in the MJCF generator until D19; the
+  # self-collision check needs them too, and two copies of a number that sizes
+  # both link mass and clearance is how they drift apart. IDENTICAL in
+  # scara.yaml -- a clearance comparison between two candidates with different
+  # link thicknesses would be measuring the config, not the architecture.
+  link_radius_m: !placeholder 0.020
+  column_radius_m: !placeholder 0.050
+  shoulder_height_m: !placeholder 0.45
+  upper_arm_m: !placeholder 0.40
+  forearm_m: !placeholder 0.35
+  drive_lever_m: !placeholder 0.12
+  level_offset_m: !placeholder 0.10
+  tool_drop_m: !placeholder 0.10
+  motor_mount_offset_m: !placeholder 0.12
+
+# D3-REQ clearance check. Piece diameter is Evan's (~30-35 mm); jaw figures are
+# PLACEHOLDER until a gripper exists.
+gripper:
+  piece_diameter_m: 0.032
+  jaw_span_open_m: !placeholder 0.044
+  jaw_thickness_m: !placeholder 0.006
+  body_width_m: !placeholder 0.050
+  # Height above the board surface at which the piece is gripped. Board surface
+  # and arm base mounting face are both taken as z = 0 (same table).
+  grip_height_m: !placeholder 0.020
+  # Height the gripper traverses at, between squares. Must clear the tallest
+  # piece on the board -- a tournament king is ~95 mm, so 120 mm leaves 25 mm.
+  travel_height_m: !placeholder 0.120
+  # Time to close or open on a piece, once. A move pays this TWICE. At a 2 s
+  # cycle two dwells are a quarter of the budget, so this is not a rounding
+  # term -- it sets how much of the cycle is left for motion.
+  actuation_s: !placeholder 0.250
+
+# Coarse. D9: the deliverable is the SHAPE of the surface and the trade curve.
+# No refinement until the trade curve has been reviewed.
+# EXTENDED DOWNWARD 2026-07-28, not subdivided. The first coarse run put its
+# best survivor at the MINIMUM of both upper_arm_m and board_radius_m, which
+# says the box was in the wrong place, not that the grid was too coarse. Step
+# spacing is held at ~0.08 m on the link axes and ~0.11 m on radius so this
+# stays a coarse run (D9). No refinement until this trade curve is reviewed.
+sweep:
+  upper_arm_m:      {min: 0.15, max: 0.55, steps: 6}
+  forearm_m:        {min: 0.25, max: 0.50, steps: 4}
+  board_radius_m:   {min: 0.15, max: 0.70, steps: 6}
+  board_yaw_rad:    {min: 0.0,  max: 0.785398, steps: 3}
+
+# max_vel_rad_s and max_accel_rad_s2 are DERIVED, not placeholders. D14: a 4 s
+# chess move, five rest-to-rest segments on triangular profiles plus two 0.25 s
+# gripper dwells, scored on the worst legal move over the D13-surviving
+# geometries. See F12 and `python -m app.accel_budget`.
+#   max_accel_rad_s2  4.01   the acceleration that fits the worst move in 3.5 s
+#   max_vel_rad_s     2.23   the peak that acceleration produces -- a REQUIREMENT
+#                            of the cycle time, not a motor capability. 2.23 rad/s
+#                            is 533 motor rpm at 1:25. See OPEN-D.
+#
+# Reduction is PER JOINT (D15). Yaw is not slaved to the planar joints: worst-square
+# radius exceeds both link lengths, so the yaw joint alone sets the resolution gate.
+# JOINT LIMITS, revised under D19 by a rule applied IDENTICALLY to both
+# candidates, so that neither is scored on how carefully its placeholders were
+# written:
+#
+#   * any joint the gripper cable crosses gets +/-150 deg of travel, unless a
+#     tighter physical constraint already applies;
+#   * an ELBOW's limit is RELATIVE to its parent (`relative_to`), because its
+#     travel is a property of the mechanism, not of where the arm points;
+#   * world-frame constraints stay whatever they physically are.
+#
+# For THIS candidate the rule changes nothing measurable. Yaw goes from +/-180
+# to +/-150 and the board needs about +/-34 deg. The relative elbow range
+# implied by the absolute limits was [-150, +60] deg, so a +/-150 relative limit
+# only removes folds beyond -150 that were already impossible. Recorded because
+# "the limits were tightened and the numbers did not move" is the evidence that
+# the comparison was not rigged by the tightening.
+joints:
+  - name: q0_yaw
+    min_rad: -2.6180   # -150 deg, cable wind-up through the rotating base
+    max_rad: 2.6180
+    max_vel_rad_s: 2.23
+    max_accel_rad_s2: 4.01
+    drive:
+      kind: belt_2stage
+      reduction: 25.0
+      microsteps: !placeholder 16
+      efficiency: !placeholder 0.90
+  - name: q1_upper_arm
+    min_rad: !placeholder -0.5236
+    max_rad: !placeholder 1.5708
+    max_vel_rad_s: 2.23
+    max_accel_rad_s2: 4.01
+    drive: &belt_2stage
+      kind: belt_2stage
+      reduction: 25.0
+      microsteps: !placeholder 16
+      efficiency: !placeholder 0.90
+  # ABSOLUTE range kept -- it is the vertical-plane clearance over the table,
+  # a world-frame fact. PLUS a +/-150 deg relative elbow limit, the same number
+  # SCARA's elbow gets. Both apply.
+  #
+  # What the relative limit actually excludes is the 60 deg band around full
+  # doubling-back (relative 150 to 210 deg, which wrap onto each other and are
+  # the same physical fold). The absolute range alone admits that band, because
+  # q2 - q1 reaches -210 deg and -210 wraps to +150. An earlier note here said
+  # -210 deg was "more than the links can physically make" -- that was wrong,
+  # -210 IS +150. The band near 180 deg is the impossible part.
+  - name: q2_forearm
+    min_rad: !placeholder -2.0944
+    max_rad: !placeholder 0.5236
+    relative_to: q1_upper_arm
+    rel_min_rad: -2.6180
+    rel_max_rad: 2.6180
+    max_vel_rad_s: 2.23
+    max_accel_rad_s2: 4.01
+    drive: *belt_2stage

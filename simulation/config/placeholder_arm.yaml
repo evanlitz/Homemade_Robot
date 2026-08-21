@@ -1,0 +1,82 @@
+﻿# PLACEHOLDER ARCHITECTURE -- NOT A CANDIDATE.
+#
+# This file exists so the loader, the smoke test and the motion stubs have a
+# shape to load. It is a generic 3-DOF serial arm with invented geometry.
+# It is NOT one of the five candidates in CLAUDE.md and no conclusion should
+# ever be drawn from it.
+#
+# Every invented number is tagged `!placeholder`. Untagged numbers are real:
+# they come from the motor datasheet or from the task definition in CLAUDE.md.
+# `load_architecture(...).placeholder_fields()` lists every tagged value.
+
+name: placeholder_arm
+candidate_id: null
+closed_loop: false
+description: >
+  Generic 3-DOF serial arm with invented geometry. Toolchain scaffolding only.
+
+# REAL -- Longs 34HS1456 datasheet, 6 owned. Single shaft: rear_shaft is false,
+# which rules out rear-mounted encoder kits (CLAUDE.md, Hardware I own).
+motor:
+  part: "Longs 34HS1456 NEMA 34"
+  holding_torque_nm: 8.4
+  current_a_per_phase: 5.6
+  full_step_deg: 1.8
+  mass_kg: 3.8
+  shaft_diameter_m: 0.014
+  rear_shaft: false
+  rotor_inertia_kgm2: 2.7e-4
+  phase_resistance_ohm: 0.55
+
+# REAL -- target task, CLAUDE.md.
+task:
+  board_square_m: 0.057
+  board_span_m: 0.457
+  reach_requirement_m: 0.600
+  accuracy_target_m: 0.005
+
+# PLACEHOLDER -- all of it.
+links:
+  - name: base
+    length_m: !placeholder 0.20
+    mass_kg: !placeholder 2.0
+  - name: upper
+    length_m: !placeholder 0.35
+    mass_kg: !placeholder 1.2
+  - name: fore
+    length_m: !placeholder 0.30
+    mass_kg: !placeholder 0.8
+
+# PLACEHOLDER -- all of it. Limits are symmetric because nothing has been
+# modelled yet, not because symmetry is right.
+joints:
+  - name: j0_yaw
+    min_rad: !placeholder -3.1416
+    max_rad: !placeholder 3.1416
+    max_vel_rad_s: !placeholder 1.5
+    max_accel_rad_s2: !placeholder 4.0
+    drive:
+      kind: belt  # PLACEHOLDER (string, so no !placeholder tag -- see decision list)
+      reduction: !placeholder 20.0
+      microsteps: !placeholder 16
+      efficiency: !placeholder 0.90
+  - name: j1_shoulder
+    min_rad: !placeholder -2.0944
+    max_rad: !placeholder 2.0944
+    max_vel_rad_s: !placeholder 1.5
+    max_accel_rad_s2: !placeholder 4.0
+    drive:
+      kind: belt  # PLACEHOLDER (string, so no !placeholder tag -- see decision list)
+      reduction: !placeholder 20.0
+      microsteps: !placeholder 16
+      efficiency: !placeholder 0.90
+  - name: j2_elbow
+    min_rad: !placeholder -2.6180
+    max_rad: !placeholder 2.6180
+    max_vel_rad_s: !placeholder 1.5
+    max_accel_rad_s2: !placeholder 4.0
+    drive:
+      kind: belt  # PLACEHOLDER (string, so no !placeholder tag -- see decision list)
+      reduction: !placeholder 20.0
+      microsteps: !placeholder 16
+      efficiency: !placeholder 0.90
