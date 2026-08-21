@@ -22,7 +22,7 @@ def pose_error(current, target):
 
 
 def ik(target, q0_deg, tol_mm=0.01, tol_deg=0.01,
-       max_iters=200, damping=0.05, step_limit_deg=10.0, clamp=True):
+       max_iters=200, damping=0.02, step_limit_deg=10.0, clamp=True):
     """Solve for joint angles reaching `target` (4x4, metres).
 
     Returns degrees, or None if it fails to converge or leaves the limits.

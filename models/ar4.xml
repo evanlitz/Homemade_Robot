@@ -1,45 +1,103 @@
 <mujoco model="ar4_mk5">
+  <!-- Body frames, joint axes and per-part visual offsets are transcribed from
+       ../ar4_ros_driver/annin_ar4_description/urdf/ar_macro.xacro. The MK5 mesh
+       set splits each link into several STLs (aluminum / motor / cover / logo),
+       so one body carries several <geom mesh=...> entries. The previous version
+       of this file used the MK3 single-STL names and never loaded.
+
+       eulerseq="XYZ" (uppercase) is required: URDF rpy is extrinsic and
+       MuJoCo's default xyz is intrinsic. Three of six joints differ. -->
   <compiler angle="radian" eulerseq="XYZ" meshdir="meshes/" autolimits="true"/>
   <option gravity="0 0 -9.81" integrator="implicitfast"/>
 
   <default>
     <joint damping="5" armature="0.1"/>
-    <geom type="mesh" rgba="0.75 0.75 0.78 1" density="1200" contype="0" conaffinity="0"/>
+    <!-- Visual meshes only. Adjacent link meshes overlap, and contact forces
+         between them fight the actuators. *_Col.STL is shipped for links 1-4
+         and is copied into meshes/ unused, for chess self-collision checking
+         later; links 5, 6 and the base have no collision mesh in the MK5 set
+         and will need hand-built primitives. -->
+    <geom type="mesh" rgba="0.75 0.75 0.78 1" density="1200"
+          contype="0" conaffinity="0"/>
     <position kp="8000" kv="400" forcerange="-1000 1000"/>
   </default>
 
   <asset>
-    <mesh name="base_link" file="base_link.STL"/>
-    <mesh name="link_1" file="link_1.STL"/>
-    <mesh name="link_2" file="link_2.STL"/>
-    <mesh name="link_3" file="link_3.STL"/>
-    <mesh name="link_4" file="link_4.STL"/>
-    <mesh name="link_5" file="link_5.STL"/>
-    <mesh name="link_6" file="link_6.STL"/>
+    <mesh name="base_aluminum"  file="Link_Base_Aluminum.STL"/>
+    <mesh name="base_enclosure" file="Link_Base_Enclosure.STL"/>
+    <mesh name="base_motor"     file="Link_Base_Motor.STL"/>
+
+    <mesh name="l1_aluminum" file="Link_1_Aluminum.STL"/>
+    <mesh name="l1_motor"    file="Link_1_Motor.STL"/>
+
+    <mesh name="l2_aluminum" file="Link_2_Aluminum.STL"/>
+    <mesh name="l2_motor"    file="Link_2_Motor.STL"/>
+    <mesh name="l2_cover"    file="Link_2_Cover.STL"/>
+    <mesh name="l2_logo"     file="Link_2_Logo.STL"/>
+
+    <mesh name="l3_aluminum" file="Link_3_Aluminum.STL"/>
+    <mesh name="l3_motor"    file="Link_3_Motor.STL"/>
+
+    <mesh name="l4_aluminum" file="Link_4_Aluminum.STL"/>
+    <mesh name="l4_motor"    file="Link_4_Motor.STL"/>
+    <mesh name="l4_cover"    file="Link_4_Cover.STL"/>
+    <mesh name="l4_logo"     file="Link_4_Logo.STL"/>
+
+    <mesh name="l5_aluminum" file="Link_5_Aluminum.STL"/>
+    <mesh name="l5_motor"    file="Link_5_Motor.STL"/>
+
+    <mesh name="l6_aluminum" file="Link_6_Aluminum.STL"/>
   </asset>
 
   <worldbody>
     <light pos="0 0 2" dir="0 0 -1" diffuse="0.8 0.8 0.8"/>
+    <geom name="floor" type="plane" size="2 2 0.05" rgba="0.3 0.3 0.32 1"
+          contype="0" conaffinity="0"/>
+
     <body name="base_link">
-      <geom mesh="base_link"/>
-      <body name="link_1" euler="3.14159265 0 0">
-        <joint name="joint_1" axis="0 0 1" range="-2.96706 2.96706"/>
-        <geom mesh="link_1"/>
-        <body name="link_2" pos="0 0.0642 -0.16977" euler="1.5708 0 -1.5708">
+      <geom mesh="base_aluminum"  euler="0 0 -1.5708"/>
+      <geom mesh="base_enclosure" euler="0 0 -1.5708"/>
+      <geom mesh="base_motor"     euler="0 0 -1.5708"/>
+
+      <body name="link_1" pos="0 0 0.092" euler="3.14159265 0 0">
+        <!-- axis negated against the URDF, which has "0 0 1" here. The URDF's
+             rpy="pi 0 0" on this joint flips link_1's z, so a positive URDF q1
+             turns the opposite way to a positive DH q1. Everything upstream of
+             the backends speaks the DH convention from kinematics.cpp, so the
+             model matches that and qpos[i] == the J1..J6 the solver produces.
+             Joints 2-6 need no such correction. See tests/test_sim_model.py. -->
+        <joint name="joint_1" axis="0 0 -1" range="-2.96706 2.96706"/>
+        <geom mesh="l1_aluminum"/>
+        <geom mesh="l1_motor"/>
+
+        <body name="link_2" pos="0 0.06415 -0.07778" euler="1.5708 0 -1.5708">
           <joint name="joint_2" axis="0 0 -1" range="-0.73304 1.57080"/>
-          <geom mesh="link_2"/>
-          <body name="link_3" pos="0 -0.305 0.007" euler="0 0 3.14159265">
+          <geom mesh="l2_aluminum" pos="0 0 -0.00887" euler="3.14 0 0"/>
+          <geom mesh="l2_motor"    pos="0 0 -0.00887" euler="3.14 0 0"/>
+          <geom mesh="l2_cover"    pos="0 0 -0.00887" euler="3.14 0 0"/>
+          <geom mesh="l2_logo"     pos="0 0 -0.00887" euler="3.14 0 0"/>
+
+          <body name="link_3" pos="0 -0.305 0" euler="0 0 3.14159265">
             <joint name="joint_3" axis="0 0 -1" range="-1.55334 0.90757"/>
-            <geom mesh="link_3"/>
+            <geom mesh="l3_aluminum" pos="0 0 -0.03671"/>
+            <geom mesh="l3_motor"    pos="0 0 -0.03671"/>
+
             <body name="link_4" pos="0 0 0" euler="1.5708 0 -1.5708">
               <joint name="joint_4" axis="0 0 -1" range="-3.14159 3.14159"/>
-              <geom mesh="link_4"/>
-              <body name="link_5" pos="0 0 -0.22263" euler="3.14159265 0 -1.5708">
+              <geom mesh="l4_aluminum" pos="0 0 -0.07594" euler="0 0 -1.5708"/>
+              <geom mesh="l4_motor"    pos="0 0 -0.07594" euler="0 0 -1.5708"/>
+              <geom mesh="l4_cover"    pos="0 0 -0.07594" euler="0 0 -1.5708"/>
+              <geom mesh="l4_logo"     pos="0 0 -0.07594" euler="0 0 -1.5708"/>
+
+              <body name="link_5" pos="0 0 -0.22294" euler="3.14159265 0 -1.5708">
                 <joint name="joint_5" axis="1 0 0" range="-1.83260 1.83260"/>
-                <geom mesh="link_5"/>
-                <body name="link_6" pos="0 0 0.041" euler="0 0 3.14159265">
+                <geom mesh="l5_aluminum" pos="0 0 -0.0275"/>
+                <geom mesh="l5_motor"    pos="0 0 -0.0275"/>
+
+                <body name="link_6" pos="0 0 0.041" euler="0 0 0">
                   <joint name="joint_6" axis="0 0 1" range="-3.14159 3.14159"/>
-                  <geom mesh="link_6"/>
+                  <geom mesh="l6_aluminum" pos="0 0 -0.016"/>
+                  <!-- centre of the end effector mounting face (URDF ee_link) -->
                   <site name="ee" pos="0 0 0" size="0.005" rgba="1 0 0 1"/>
                 </body>
               </body>

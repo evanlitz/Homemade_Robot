@@ -34,11 +34,7 @@ def test_ik_round_trip():
 
     rate = 1.0 - misses / 200
     print(f"\nconvergence {rate:.1%}, worst {worst_mm:.2e} mm / {worst_deg:.2e} deg")
-    # 99% not 100%: the wide seed set gets to 99.5% at the current damping of
-    # 0.05, and to 100% at 0.02. Raise this to 1.0 once the damping strategy is
-    # settled -- see "Next tasks" in CLAUDE.md. Deliberately not loosened
-    # further; a drop below 99% is a real regression.
-    assert rate >= 0.99, f"{misses} regular poses did not converge"
+    assert rate == 1.0, f"{misses} regular poses did not converge"
 
 
 def test_ik_from_nearby_seed():
