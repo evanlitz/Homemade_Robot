@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# ~49 MB of STLs generated from ../ar4_ros_driver by tools/populate_meshes.py
+models/meshes/
+
+# assistant scratch, never commit
+CLAUDE.md
+.claude/

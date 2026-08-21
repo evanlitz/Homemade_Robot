@@ -2,10 +2,10 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+out/
+MUJOCO_LOG.TXT
 
-# ~49 MB of STLs generated from ../ar4_ros_driver by tools/populate_meshes.py
-models/meshes/
-
-# assistant scratch, never commit
+# Local working brief. Not pushed -- it names Claude and would be permanent
+# in public history. To publish it: git add -f simulation/CLAUDE.MD
+CLAUDE.MD
 CLAUDE.md
-.claude/

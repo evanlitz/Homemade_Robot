@@ -10,7 +10,9 @@ from pathlib import Path
 import pytest
 
 _ROOT = Path(__file__).parent
-sys.path[:0] = [str(_ROOT), str(_ROOT.parent / "ar4-hmi")]
+# ar4-hmi is a checkout alongside the repo, not inside it, so this climbs out
+# of ar4/ and then out of the repo root.
+sys.path[:0] = [str(_ROOT), str(_ROOT.parent.parent / "ar4-hmi")]
 
 
 @pytest.fixture(scope="session")

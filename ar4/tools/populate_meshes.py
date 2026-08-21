@@ -15,7 +15,9 @@ from pathlib import Path
 
 import numpy as np
 
-SRC = Path(__file__).resolve().parents[2] / "ar4_ros_driver" / \
+# parents[1] is ar4/, parents[2] the repo root, parents[3] the directory the
+# reference checkouts sit in alongside the repo.
+SRC = Path(__file__).resolve().parents[3] / "ar4_ros_driver" / \
     "annin_ar4_description" / "meshes" / "ar4_mk5"
 DST = Path(__file__).resolve().parents[1] / "models" / "meshes"
 
