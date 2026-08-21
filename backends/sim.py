@@ -12,13 +12,28 @@ except ImportError:
 from backends.base import Backend
 
 
+# How far ahead of the current waypoint to place the setpoint when following a
+# trajectory. The position servo lags a moving setpoint in proportion to joint
+# speed -- ~0.037 deg per deg/s -- which costs 9.2 mm of wrist error on a
+# full-speed chess move, well over the +/-5 mm budget. Leading by this much
+# brings it to 0.9 mm at no cost in duration.
+#
+# MEASURED, not derived. kv/kp = 400/8000 predicts 50 ms, and 50 ms is 2.7x
+# worse than this value: the model's armature and joint damping mean the servo
+# is not a pure first-order lag. Re-measure by sweeping this against wrist
+# error if the gains, armature, damping, or dt ever change.
+SETPOINT_LEAD_S = 0.040
+
+
 class SimBackend(Backend):
-    def __init__(self, model_path="models/ar4.xml", render=True, realtime=True):
+    def __init__(self, model_path="models/ar4.xml", render=True, realtime=True,
+                 setpoint_lead_s=SETPOINT_LEAD_S):
         if mujoco is None:
             raise RuntimeError("mujoco is not installed")
         self.model_path = model_path
         self.render = render
         self.realtime = realtime
+        self.setpoint_lead_s = float(setpoint_lead_s)
         self.m = self.d = self.viewer = None
         self._gripper = 1.0
 
@@ -57,14 +72,50 @@ class SimBackend(Backend):
                 if self.realtime:
                     time.sleep(self.m.opt.timestep)
 
-        # let the controller settle onto the target
-        for _ in range(6000):
-            self.d.ctrl[:6] = target
+        self._settle(target)
+        return self.get_joints()
+
+    def _settle(self, target_rad, max_steps=6000, tol=1e-4):
+        """Hold the setpoint until the arm stops moving, so both move_joints
+        and follow can honour "blocks until the motion is complete"."""
+        for _ in range(max_steps):
+            self.d.ctrl[:6] = target_rad
             mujoco.mj_step(self.m, self.d)
-            if np.max(np.abs(self.d.qpos[:6] - target)) < 1e-4:
+            if np.max(np.abs(self.d.qpos[:6] - target_rad)) < tol:
                 break
         if self.viewer is not None:
             self.viewer.sync()
+
+    def follow(self, trajectory):
+        q = np.deg2rad(np.asarray(trajectory.q, dtype=float))
+        n = len(q)
+        if n == 0:
+            return self.get_joints()
+        if n == 1:
+            return self.move_joints(np.rad2deg(q[0]))
+
+        dt = float(trajectory.dt)
+        steps = max(1, int(round(dt / self.m.opt.timestep)))
+        lead = self.setpoint_lead_s / dt
+
+        for i in range(n):
+            # Interpolate rather than rounding to a whole waypoint: the lead is
+            # a duration, and dt is the caller's choice, so it is generally
+            # fractional.
+            f = min(i + lead, n - 1.0)
+            lo = int(np.floor(f))
+            hi = min(lo + 1, n - 1)
+            frac = f - lo
+            self.d.ctrl[:6] = q[lo] * (1.0 - frac) + q[hi] * frac
+
+            for _ in range(steps):
+                mujoco.mj_step(self.m, self.d)
+            if self.viewer is not None:
+                self.viewer.sync()
+                if self.realtime:
+                    time.sleep(dt)
+
+        self._settle(q[-1])
         return self.get_joints()
 
     def set_gripper(self, open_frac):

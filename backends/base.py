@@ -25,6 +25,27 @@ class Backend(ABC):
         """Move to absolute joint angles. Blocks until settled."""
 
     @abstractmethod
+    def follow(self, trajectory):
+        """Execute a trajectory of joint waypoints, continuously.
+
+        `trajectory` needs exactly two attributes: `q`, an (N, 6) array of
+        joint angles in degrees, and `dt`, the seconds between consecutive
+        rows. Nothing else -- backends do not import motion.trajectory.
+
+        Timing comes from the trajectory, so there is no speed argument; plan
+        a slower path if you want a slower move.
+
+        Blocks until the motion is complete and the arm is at rest on q[-1],
+        and returns the joint angles actually reached, in degrees.
+
+        How the setpoints are tracked is the backend's own business. MuJoCo's
+        position servo lags a streamed setpoint and has to lead it; the Teensy
+        does its own ramping and will need something different. Callers are
+        promised only that the tool follows the planned path and that the arm
+        ends at rest on the final waypoint.
+        """
+
+    @abstractmethod
     def set_gripper(self, open_frac):
         """0.0 fully closed, 1.0 fully open."""
 
