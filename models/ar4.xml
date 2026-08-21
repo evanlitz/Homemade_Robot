@@ -10,6 +10,12 @@
   <compiler angle="radian" eulerseq="XYZ" meshdir="meshes/" autolimits="true"/>
   <option gravity="0 0 -9.81" integrator="implicitfast"/>
 
+  <!-- default offscreen framebuffer is 640x480; raise it so headless renders
+       for screenshots are not silently capped -->
+  <visual>
+    <global offwidth="1280" offheight="960"/>
+  </visual>
+
   <default>
     <joint damping="5" armature="0.1"/>
     <!-- Visual meshes only. Adjacent link meshes overlap, and contact forces
