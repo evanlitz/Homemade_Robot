@@ -44,10 +44,15 @@ def _rz(deg):
 
 
 def test_model_loads(model):
-    assert model.nq == 6
-    assert model.nu == 6
+    # Six arm joints, then the two gripper jaws. The arm has to stay at
+    # indices 0-5: every slice in SimBackend is [:6], and ctrl[6:8] is the
+    # gripper. Reordering these silently breaks both.
+    assert model.nq == 8
+    assert model.nu == 8
     for i in range(6):
         assert mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i) == f"joint_{i + 1}"
+    assert mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, 6) == "gripper_jaw1_joint"
+    assert mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, 7) == "gripper_jaw2_joint"
 
 
 def test_joint_ranges_match_kinematics(model):

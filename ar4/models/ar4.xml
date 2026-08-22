@@ -26,6 +26,19 @@
     <geom type="mesh" rgba="0.75 0.75 0.78 1" density="1200"
           contype="0" conaffinity="0"/>
     <position kp="8000" kv="400" forcerange="-1000 1000"/>
+
+    <!-- The SG1 is a hobby servo squeezing small plastic jaws, not a
+         geared arm joint, so it gets its own gains. kp/kv/forcerange here
+         are PLACEHOLDERS chosen to look sane -- nothing has been measured
+         against a DS3225. Re-tune once the real gripper can be driven. -->
+    <default class="gripper">
+      <joint damping="1" armature="0.001"/>
+      <position kp="2000" kv="50" forcerange="-80 80"/>
+      <!-- disjoint contype/conaffinity so the two jaws never collide with
+           each other; a chess piece geom with contype="2" conaffinity="1"
+           collides with both. -->
+      <geom contype="1" conaffinity="2"/>
+    </default>
   </default>
 
   <asset>
@@ -53,6 +66,10 @@
     <mesh name="l5_motor"    file="Link_5_Motor.STL"/>
 
     <mesh name="l6_aluminum" file="Link_6_Aluminum.STL"/>
+
+    <mesh name="g_base" file="gripper_base_link.stl"/>
+    <mesh name="g_jaw1" file="gripper_jaw1_link.stl"/>
+    <mesh name="g_jaw2" file="gripper_jaw2_link.stl"/>
   </asset>
 
   <worldbody>
@@ -105,6 +122,31 @@
                   <geom mesh="l6_aluminum" pos="0 0 -0.016"/>
                   <!-- centre of the end effector mounting face (URDF ee_link) -->
                   <site name="ee" pos="0 0 0" size="0.005" rgba="1 0 0 1"/>
+
+                  <!-- SG1 servo gripper, transcribed from
+                       ../ar4_ros_driver/annin_ar4_description/urdf/ar_gripper_macro.xacro.
+                       gripper_base_joint is a pure -90 deg X rotation with no
+                       offset, and ee_joint is identity, so the base bolts
+                       straight onto link_6. -->
+                  <body name="gripper_base" euler="-1.5708 0 0">
+                    <geom mesh="g_base" rgba="0.63 0.63 0.63 1" mass="0.08"/>
+
+                    <body name="gripper_jaw1" pos="0 -0.036 0">
+                      <joint name="gripper_jaw1_joint" class="gripper"
+                             type="slide" axis="-1 0 0" range="0 0.014"/>
+                      <geom mesh="g_jaw1" class="gripper" rgba="0.08 0.08 0.08 1" mass="0.01"/>
+                    </body>
+
+                    <!-- jaw2 mirrors jaw1 through a 180 deg Y flip, so the same
+                         -x axis closes it from the opposite side. The URDF mimics
+                         it off jaw1; MuJoCo has no mimic, so both carry an
+                         actuator and set_gripper drives them together. -->
+                    <body name="gripper_jaw2" pos="0 -0.036 0" euler="0 -3.14159265 0">
+                      <joint name="gripper_jaw2_joint" class="gripper"
+                             type="slide" axis="-1 0 0" range="0 0.014"/>
+                      <geom mesh="g_jaw2" class="gripper" rgba="0.08 0.08 0.08 1" mass="0.01"/>
+                    </body>
+                  </body>
                 </body>
               </body>
             </body>
@@ -121,5 +163,7 @@
     <position name="a4" joint="joint_4"/>
     <position name="a5" joint="joint_5"/>
     <position name="a6" joint="joint_6"/>
+    <position name="grip1" class="gripper" joint="gripper_jaw1_joint"/>
+    <position name="grip2" class="gripper" joint="gripper_jaw2_joint"/>
   </actuator>
 </mujoco>

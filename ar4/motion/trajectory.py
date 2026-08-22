@@ -217,7 +217,7 @@ def check_waypoint(q, q_prev, index, u,
 
 def plan_line(q_start, target, v_max=V_MAX_MM_S, a_max=A_MAX_MM_S2,
               w_max=W_MAX_DEG_S, alpha_max=ALPHA_MAX_DEG_S2, dt=DT,
-              validate=True, **checks):
+              validate=True, tool=False, **checks):
     """Straight line in space from fk(q_start) to `target` (4x4, metres).
 
     Translation and rotation are given separate limits and the segment runs for
@@ -233,7 +233,10 @@ def plan_line(q_start, target, v_max=V_MAX_MM_S, a_max=A_MAX_MM_S2,
     unreachable, out of limits, singular, or discontinuous.
     """
     q_start = np.asarray(q_start, dtype=float)
-    start = fk(q_start)
+    # Interpolate in whichever frame the caller is aiming with. Under a rotating
+    # wrist the flange and the fingertip trace different curves, so a line that
+    # is straight for one is not straight for the other.
+    start = fk(q_start, tool=tool)
 
     length_mm = np.linalg.norm(target[:3, 3] - start[:3, 3]) * 1000.0
     angle_deg = np.rad2deg(
@@ -257,7 +260,7 @@ def plan_line(q_start, target, v_max=V_MAX_MM_S, a_max=A_MAX_MM_S2,
     out = [q_start]
     for i, u in enumerate(u_of_t[1:], start=1):
         pose = interpolate_pose(start, target, u)
-        q = ik(pose, out[-1])
+        q = ik(pose, out[-1], tool=tool)
         if q is None:
             raise PlanningError("unreachable", i, u)
         if validate:

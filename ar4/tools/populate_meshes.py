@@ -17,8 +17,11 @@ import numpy as np
 
 # parents[1] is ar4/, parents[2] the repo root, parents[3] the directory the
 # reference checkouts sit in alongside the repo.
-SRC = Path(__file__).resolve().parents[3] / "ar4_ros_driver" / \
-    "annin_ar4_description" / "meshes" / "ar4_mk5"
+_MESHES = (Path(__file__).resolve().parents[3] / "ar4_ros_driver"
+           / "annin_ar4_description" / "meshes")
+# The MK5 arm set and the SG1 gripper set ship in separate directories
+# and disagree on filename case (*.STL vs *.stl), so match on suffix.
+SRC_DIRS = (_MESHES / "ar4_mk5", _MESHES / "ar4_gripper")
 DST = Path(__file__).resolve().parents[1] / "models" / "meshes"
 
 MUJOCO_MAX_FACES = 200_000
@@ -79,12 +82,15 @@ def decimate(raw, name, limit=MUJOCO_MAX_FACES):
 
 
 def main():
-    if not SRC.is_dir():
-        sys.exit(f"source meshes not found: {SRC}")
+    missing = [d for d in SRC_DIRS if not d.is_dir()]
+    if missing:
+        sys.exit(f"source meshes not found: {missing[0]}")
     DST.mkdir(parents=True, exist_ok=True)
 
     converted = copied = 0
-    for src in sorted(SRC.glob("*.STL")):
+    sources = [f for d in SRC_DIRS for f in sorted(d.iterdir())
+               if f.suffix.lower() == ".stl"]
+    for src in sources:
         raw = src.read_bytes()
         result = to_binary_stl(raw)
         if result is None:

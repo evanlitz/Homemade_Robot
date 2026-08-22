@@ -8,7 +8,7 @@ from motion.kinematics import fk
 from motion.trajectory import Trajectory, plan_path
 
 pytest.importorskip("mujoco")
-from backends.sim import SETPOINT_LEAD_S, SimBackend  # noqa: E402
+from backends.sim import JAW_TRAVEL_M, SETPOINT_LEAD_S, SimBackend  # noqa: E402
 
 Q_HOME = np.array([0.0, 20.0, -20.0, 0.0, 45.0, 0.0])
 ROOT = Path(__file__).resolve().parents[1]
@@ -118,3 +118,35 @@ def test_setpoint_lead_is_in_the_measured_range():
     """40 ms was the sweep optimum; kv/kp predicts 50 ms and measures 2.7x
     worse. If this drifts far from the measurement, re-run the sweep."""
     assert 0.02 <= SETPOINT_LEAD_S <= 0.06
+
+
+def test_set_gripper_spans_the_documented_travel(backend):
+    """0 -> 1 must map onto the full 28 mm the URDF gives the SG1.
+
+    Chess needs this number to be right, not approximately right: at 28 mm
+    the jaws cannot close on a tournament piece's base, only its stem, and
+    that is what sets the grasp height.
+    """
+    backend.set_gripper(0.0)
+    assert backend.d.qpos[6:8].sum() == pytest.approx(0.0, abs=1e-4)
+
+    backend.set_gripper(1.0)
+    opening = backend.d.qpos[6:8].sum()
+    assert opening == pytest.approx(2 * JAW_TRAVEL_M, abs=1e-4)
+    assert opening == pytest.approx(0.028, abs=1e-4)
+
+    backend.set_gripper(0.5)
+    assert backend.d.qpos[6:8].sum() == pytest.approx(JAW_TRAVEL_M, abs=1e-4)
+
+
+def test_set_gripper_leaves_the_arm_where_it_was(backend):
+    """Actuating the gripper steps the sim, so the arm keeps settling under
+    gravity while it runs. That drift has to stay far below the 5 mm task
+    budget or a grasp would nudge the tool off the square."""
+    backend.move_joints(Q_HOME, speed=100)
+    before = np.rad2deg(backend.d.qpos[:6].copy())
+    backend.set_gripper(1.0)
+    backend.set_gripper(0.0)
+    after = np.rad2deg(backend.d.qpos[:6])
+
+    assert np.max(np.abs(after - before)) < 0.05

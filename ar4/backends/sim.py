@@ -24,6 +24,11 @@ from backends.base import Backend
 # error if the gains, armature, damping, or dt ever change.
 SETPOINT_LEAD_S = 0.040
 
+# Per-jaw travel of the SG1 gripper, metres. From the prismatic limits in
+# ar_gripper_macro.xacro: each jaw runs 0 to 0.014, mimicked, so the opening
+# changes by 28 mm between fully closed and fully open.
+JAW_TRAVEL_M = 0.014
+
 
 class SimBackend(Backend):
     def __init__(self, model_path="models/ar4.xml", render=True, realtime=True,
@@ -35,7 +40,7 @@ class SimBackend(Backend):
         self.realtime = realtime
         self.setpoint_lead_s = float(setpoint_lead_s)
         self.m = self.d = self.viewer = None
-        self._gripper = 1.0
+        self._gripper = 0.0
 
     def connect(self):
         self.m = mujoco.MjModel.from_xml_path(self.model_path)
@@ -75,13 +80,25 @@ class SimBackend(Backend):
         self._settle(target)
         return self.get_joints()
 
-    def _settle(self, target_rad, max_steps=6000, tol=1e-4):
+    def _settle(self, target_rad, max_steps=6000, vel_tol=1e-7):
         """Hold the setpoint until the arm stops moving, so both move_joints
-        and follow can honour "blocks until the motion is complete"."""
-        for _ in range(max_steps):
+        and follow can honour "blocks until the motion is complete".
+
+        Settles on VELOCITY, not on reaching the setpoint. These are P+D
+        position actuators with no integral term, so gravity leaves a
+        steady-state offset of 3e-4 to 8e-4 rad -- several times larger than
+        any useful position tolerance. Waiting on position never converges: it
+        silently burned the full 6000-step budget on every single move.
+
+        Measured on the real move_joints path (which ramps the setpoint first),
+        this returns in ~410 steps instead of 6000. vel_tol is deliberately an
+        order below the 1e-6 that test_follow_ends_at_rest asserts.
+        """
+        for i in range(max_steps):
             self.d.ctrl[:6] = target_rad
             mujoco.mj_step(self.m, self.d)
-            if np.max(np.abs(self.d.qpos[:6] - target_rad)) < tol:
+            # the guard on i stops it returning before the arm has started
+            if i > 20 and np.max(np.abs(self.d.qvel[:6])) < vel_tol:
                 break
         if self.viewer is not None:
             self.viewer.sync()
@@ -118,6 +135,27 @@ class SimBackend(Backend):
         self._settle(q[-1])
         return self.get_joints()
 
-    def set_gripper(self, open_frac):
+    def set_gripper(self, open_frac, max_steps=4000):
+        """0.0 fully closed, 1.0 fully open. Blocks until the jaws stop.
+
+        Settles on jaw velocity rather than on reaching the setpoint, because
+        closing onto an object is a stall, not a failure: the jaws come to rest
+        short of the target and that is the grasp. The real gripper detects the
+        same condition with the ACS712 current sensor.
+        """
         self._gripper = float(np.clip(open_frac, 0.0, 1.0))
+        if self.d is None:
+            return self._gripper
+
+        self.d.ctrl[6:8] = self._gripper * JAW_TRAVEL_M
+        for i in range(max_steps):
+            mujoco.mj_step(self.m, self.d)
+            if self.viewer is not None:
+                self.viewer.sync()
+                if self.realtime:
+                    time.sleep(self.m.opt.timestep)
+            # the guard on i stops it returning on the first step, when the
+            # jaws have not started moving yet and velocity is still zero
+            if i > 20 and np.abs(self.d.qvel[6:8]).max() < 1e-5:
+                break
         return self._gripper

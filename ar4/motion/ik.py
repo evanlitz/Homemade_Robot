@@ -5,7 +5,7 @@ workspace; returns None rather than a bad answer when it doesn't.
 """
 import numpy as np
 
-from motion.kinematics import fk, jacobian, JOINT_LIMITS, in_limits
+from motion.kinematics import fk, jacobian, JOINT_LIMITS, TOOL_INV, in_limits
 
 def pose_error(current, target):
     """6-vector twist taking `current` to `target`. Position in m, rotation in rad."""
@@ -22,11 +22,19 @@ def pose_error(current, target):
 
 
 def ik(target, q0_deg, tol_mm=0.01, tol_deg=0.01,
-       max_iters=200, damping=0.02, step_limit_deg=10.0, clamp=True):
+       max_iters=200, damping=0.02, step_limit_deg=10.0, clamp=True,
+       tool=False):
     """Solve for joint angles reaching `target` (4x4, metres).
+
+    tool=True means `target` is a fingertip pose rather than a flange pose. The
+    offset is purely axial, so it is cheaper and less error-prone to pull the
+    target back to the flange once here than to thread a tool flag through the
+    Jacobian and the error term.
 
     Returns degrees, or None if it fails to converge or leaves the limits.
     """
+    if tool:
+        target = target @ TOOL_INV
     q = np.asarray(q0_deg, dtype=float).copy()
     tol_m = tol_mm / 1000.0
     tol_rad = np.deg2rad(tol_deg)

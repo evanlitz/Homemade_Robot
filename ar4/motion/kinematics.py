@@ -67,12 +67,62 @@ def link_transform(i, q_deg):
     return _rx(alpha) @ _tx(a / 1000.0) @ _rz(theta) @ _tz(d / 1000.0)
 
 
-def fk(q_deg, upto=6):
-    """Forward kinematics. Angles in degrees, returns 4x4 pose in metres."""
+# Fingertip offset of the SG1 gripper along the flange approach axis (+z6).
+# MEASURED off models/ar4.xml: every vertex of both jaw meshes projected onto
+# the ee site's z axis with the jaws closed; the furthest lies at 64.18 mm and
+# the two jaws agree to 0.01 mm. The gripper mounts with a pure rotation about
+# x, so the offset is purely axial and the tool frame keeps the flange's
+# orientation -- z6 already IS the approach axis.
+TOOL_MM = 64.18
+
+TOOL = np.eye(4)
+TOOL[2, 3] = TOOL_MM / 1000.0
+
+TOOL_INV = np.eye(4)
+TOOL_INV[2, 3] = -TOOL_MM / 1000.0
+
+
+def fk(q_deg, upto=6, tool=False):
+    """Forward kinematics. Angles in degrees, returns 4x4 pose in metres.
+
+    tool=False gives the flange, which is what the Annin oracle computes and
+    what every existing test compares against -- do not change that default.
+    tool=True gives the fingertip frame, which is what a grasp actually aims at
+    and what app code should use.
+    """
     m = np.eye(4)
     for i in range(upto):
         m = m @ link_transform(i, q_deg[i])
+    if tool and upto == 6:
+        m = m @ TOOL
     return m
+
+
+def grasp_pose(x_mm, y_mm, z_mm, yaw_deg=0.0, tilt_deg=0.0):
+    """Fingertip pose for grasping at (x, y, z), tool pointing down.
+
+    tilt_deg leans the approach away from vertical toward +x; 0 is straight
+    down, which is what a chess board wants. yaw_deg spins the jaw line about
+    the vertical, so a piece can be approached with the jaws across whichever
+    axis has clearance.
+
+    Returns a 4x4 in metres in the TOOL frame -- pass it to ik or plan_line
+    with tool=True.
+    """
+    t = np.deg2rad(tilt_deg)
+    z_axis = np.array([np.sin(t), 0.0, -np.cos(t)])
+    x_axis = np.array([np.cos(t), 0.0, np.sin(t)])
+    y_axis = np.cross(z_axis, x_axis)
+
+    r = np.column_stack((x_axis, y_axis, z_axis))
+    yaw = np.deg2rad(yaw_deg)
+    c, s = np.cos(yaw), np.sin(yaw)
+    r = np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]]) @ r
+
+    pose = np.eye(4)
+    pose[:3, :3] = r
+    pose[:3, 3] = np.array([x_mm, y_mm, z_mm]) / 1000.0
+    return pose
 
 
 def fk_all(q_deg):

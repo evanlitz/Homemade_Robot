@@ -4,6 +4,7 @@ __pycache__/
 .pytest_cache/
 out/
 MUJOCO_LOG.TXT
+MJDATA.TXT
 
 # Local working brief. Not pushed -- it names Claude and would be permanent
 # in public history. To publish it: git add -f simulation/CLAUDE.MD
