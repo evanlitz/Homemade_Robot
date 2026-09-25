@@ -1,6 +1,12 @@
 """Vertical pick-and-place against the tool frame. Run from ar4/:
 
-    ../.venv/Scripts/python.exe tools/demo.py
+    ../.venv/Scripts/python.exe tools/demo.py                     # simulator
+    ../.venv/Scripts/python.exe tools/demo.py --port COM5 --gripper-port COM6 --home
+
+On hardware each move is slowed to fit the Teensy firmware's 60 deg/s and
+30 deg/s^2 -- the simulator's planning limits ask for up to 125 deg/s^2 on J5
+during a descent -- and one lap runs unless --laps says otherwise. Read the
+bring-up list at the bottom of backends/hw.py before the first powered run.
 
 Every pose here is a FINGERTIP pose built by grasp_pose, with the approach
 axis pointing straight down at the board -- which is what a chess grasp
@@ -10,6 +16,7 @@ away from down, so the jaws closed on air above the flange.
 
 Squares are 57 mm apart. Loops until you close the window.
 """
+import argparse
 import sys
 from pathlib import Path
 
@@ -20,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backends.sim import SimBackend
 from motion.kinematics import grasp_pose
 from motion.ik import ik_multistart
-from motion.trajectory import plan_path
+from motion.trajectory import Trajectory, plan_path
 
 SQUARE_MM = 57.0
 # Jaw yaw. NOT zero, and that is not cosmetic: with the jaws square to the
@@ -57,28 +64,67 @@ def sequence():
     ]
 
 
+def parse_args():
+    p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    p.add_argument("--port", help="Teensy serial port; omit for the simulator")
+    p.add_argument("--gripper-port", help="Arduino Nano serial port for the SG1")
+    p.add_argument("--home", action="store_true",
+                   help="run limit-switch homing first (needed after power-on)")
+    p.add_argument("--laps", type=int, default=None,
+                   help="stop after this many laps (hardware default 1)")
+    return p.parse_args()
+
+
+def open_arm(args):
+    if args.port is None:
+        model = str(Path(__file__).resolve().parents[1] / "models" / "ar4.xml")
+        arm = SimBackend(model_path=model, render=True, realtime=True)
+        arm.connect()
+        print("viewer open -- close the window to stop")
+        return arm, None
+
+    from backends.hw import HwBackend, required_slowdown
+    arm = HwBackend(port=args.port, gripper_port=args.gripper_port,
+                    assume_calibrated=not args.home)
+    arm.connect()
+    if args.home:
+        print("homing -- the arm will move to every limit switch")
+        arm.calibrate()
+
+    def fit(traj):
+        # stretch time, not the path: same waypoints, larger dt
+        return Trajectory(traj.q, traj.dt * required_slowdown(traj.q, traj.dt))
+    return arm, fit
+
+
 def main():
+    args = parse_args()
     steps = sequence()
     home = ik_multistart(grasp_pose(BOARD_X, 0.0, CLEAR_Z, yaw_deg=GRASP_YAW),
                          tool=True)
     if home is None:
         sys.exit("home pose is unreachable -- check BOARD_X against the envelope")
 
-    model = str(Path(__file__).resolve().parents[1] / "models" / "ar4.xml")
-    arm = SimBackend(model_path=model, render=True, realtime=True)
-    arm.connect()
-    print("viewer open -- close the window to stop")
+    arm, fit = open_arm(args)
+    laps = args.laps if args.laps is not None else (None if fit is None else 1)
+
+    def running():
+        viewer = getattr(arm, "viewer", None)
+        return viewer is None or viewer.is_running()
 
     try:
         arm.move_joints(home)
-        arm.set_gripper(OPEN)
+        if fit is None or args.gripper_port:
+            arm.set_gripper(OPEN)
         lap = 0
-        while arm.viewer is not None and arm.viewer.is_running():
+        while running() and (laps is None or lap < laps):
             q = np.array(arm.get_joints())
             for targets, grip in steps:
                 traj = plan_path(q, targets, tool=True)
+                if fit is not None:
+                    traj = fit(traj)
                 q = np.array(arm.follow(traj))
-                if grip is not None:
+                if grip is not None and (fit is None or args.gripper_port):
                     arm.set_gripper(grip)
             lap += 1
             print(f"lap {lap} done")
