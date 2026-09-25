@@ -69,7 +69,8 @@ Measured runtimes, not estimates. Everything is sub-second except the sweep.
 | `python -m app.sweep [name]` | 2.5 s | 1 if nothing survives | Geometry + board-placement sweep with hard rejection gates, for **either** architecture. Defaults to `palletizer`; pass `scara` for candidate #8. Prints the box check, base-clearance cost table, trade curve and acceleration sensitivity. |
 | `python -m app.accel_budget` | 1.1 s | 1 if nothing reaches | Acceleration implied by a 2 s / 4 s / 8 s chess move, and what each costs in torque and belt tension. |
 | `python -m app.yaw_ratio` | 2.4 s | always 0 | Yaw reduction swept independently of the planar joints, against resolution, torque, belt tension, packaging envelope and motor rpm. |
-| `python -m pytest tests/ -q` | 0.3 s | standard pytest | FK/IK property tests. Samples joint space, not Cartesian space. |
+| `python -m app.pullout [name] [curve.csv]` | ≈ sweep (runs it) | 1 if any joint fails the curve | OPEN-D. Without a curve: the torque each motor must deliver and at what rpm (the bench target). With a measured pull-out CSV: PASS / FAIL / NOT MEASURED per joint. Defaults to `scara`. See BENCH.md. |
+| `python -m pytest tests/ -q` | ≈ sweep + 0.3 s (test_pullout runs the sweep) | standard pytest | FK/IK property tests. Samples joint space, not Cartesian space. |
 
 **Do not wire `app.belt_check` into CI expecting a non-zero exit.** It currently prints
 `GATE FAILS` and exits **0**, because the failure is OPEN-B — a deliberate, recorded
@@ -193,6 +194,14 @@ rpm.
 envelope)`. The column houses the stack *and* sets how far out the board must sit, so
 gating a large ratio against the fixed 200 mm would credit it with a gain it cannot
 physically have.
+
+### `app.pullout`
+OPEN-D's bench target and verdict. Operating points are the worst case over the sweep's
+survivors: peak motor torque at the configured acceleration, paired with motor rpm at the
+configured velocity limit. Peak torque and peak speed are different instants (F12), so a
+PASS is conclusive and a FAIL means "do the profile-level check". Refuses to extrapolate a
+curve past its highest measured speed. `--margin` (default 2.0) is the pull-out/demand
+ratio that passes. Procedure and CSV format: BENCH.md, `bench/pullout_TEMPLATE.csv`.
 
 ### `pytest`
 Samples **joint space**, computes `p = FK(θ)`, asserts `IK(p)` recovers `θ`. Sampling

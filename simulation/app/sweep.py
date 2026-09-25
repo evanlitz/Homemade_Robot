@@ -238,18 +238,11 @@ def _neighbours(idx: int) -> list[int]:
             if 0 <= a < 8 and 0 <= b < 8 and (a, b) != (i, j)]
 
 
-def main(name: str = "palletizer") -> int:
-    base = load_architecture(name)
+def evaluate_all(base) -> list[Result]:
+    """Every point of the configured sweep box, gated. No printing."""
     build_mjcf = backend_for(base).build_mjcf
     axes = {a.name: a.values() for a in base.sweep}
     results: list[Result] = []
-
-    print(f"architecture: {base.name} (candidate {base.candidate_id}, "
-          f"closed_loop={base.closed_loop})")
-    print(f"sweep: {len(axes['upper_arm_m'])} x {len(axes['forearm_m'])} link combos "
-          f"x {len(axes['board_radius_m'])} radii x {len(axes['board_yaw_rad'])} yaws "
-          f"= {np.prod([len(v) for v in axes.values()]):.0f} evaluations\n")
-
     for l1 in axes["upper_arm_m"]:
         for l2 in axes["forearm_m"]:
             cfg = replace(base, geometry={**base.geometry,
@@ -259,6 +252,20 @@ def main(name: str = "palletizer") -> int:
             for radius in axes["board_radius_m"]:
                 for yaw in axes["board_yaw_rad"]:
                     results.append(evaluate(cfg, model, data, radius, yaw))
+    return results
+
+
+def main(name: str = "palletizer") -> int:
+    base = load_architecture(name)
+    axes = {a.name: a.values() for a in base.sweep}
+
+    print(f"architecture: {base.name} (candidate {base.candidate_id}, "
+          f"closed_loop={base.closed_loop})")
+    print(f"sweep: {len(axes['upper_arm_m'])} x {len(axes['forearm_m'])} link combos "
+          f"x {len(axes['board_radius_m'])} radii x {len(axes['board_yaw_rad'])} yaws "
+          f"= {np.prod([len(v) for v in axes.values()]):.0f} evaluations\n")
+
+    results = evaluate_all(base)
 
     survivors = [r for r in results if r.ok]
     print(f"{len(results)} evaluated, {len(survivors)} survive all gates, "

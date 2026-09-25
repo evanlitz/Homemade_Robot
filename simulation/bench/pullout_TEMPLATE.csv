@@ -1,0 +1,15 @@
+# Pull-out torque, 34HS1456. Copy to pullout_<motor>_<volts>V.csv and fill in.
+# Procedure: ../BENCH.md. Scored by: python -m app.pullout scara bench/<file>.csv
+#
+# date:
+# motor serial / which of the six:
+# driver model:
+# bus voltage (measured at the driver, under load):
+# driver current setting (A peak and A rms as the driver labels it):
+# microstep setting:
+# decay mode / auto-tune, if the driver has one:
+# load method (brake drum radius, scale or load cell):
+#
+# One row per speed per run. Repeat runs at the same speed are expected; the
+# scorer keeps the WORST reading at each speed. torque_nm is at the motor shaft.
+rpm,torque_nm
