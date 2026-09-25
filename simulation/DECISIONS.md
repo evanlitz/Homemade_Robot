@@ -1463,3 +1463,107 @@ motor set the scale of the reduction, the pulleys, the belts and the column, and
 candidate almost none of that scale is earning its keep. If SCARA is chosen, the sensible
 follow-up question is whether the two revolute joints should carry NEMA 23s and free two
 NEMA 34s for something else — **not a decision here, and explicitly not detail design.**
+
+---
+
+## D20 — Architecture: SCARA+Z (#8). The palletizer (#6) is shelved. SETTLED 2026-09-25
+
+Closes the comparison D18 reopened. **Decided by Evan on the evidence of F15–F19**, entry
+written up by Claude at his request.
+
+**The evidence, as the code produces it today** (`python -m app.sweep <name>`,
+`python -m app.pullout <name>`; SCARA's survivor count is 35, not F15's 46, because F17's
+joint limits tightened SCARA and left the palletizer byte-identical):
+
+```
+                                  palletizer (#6)      SCARA+Z (#8)
+surviving geometries                     7                 35
+best worst-square resolution        0.890 mm           0.490 mm
+peak revolute joint torque          18.8 - 24.7 N.m    1.9 - 4.8 N.m
+   of which gravity                 14.6 - 19.2 N.m    exactly 0
+worst belt tension vs allowable       36 - 47%           4 - 9%
+self-collision rejections                30                 0
+revolute motor torque at worst      1.096 N.m          0.213 N.m   (13% / 2.5% of holding)
+```
+
+**Reasoning.** SCARA is better on every axis the simulation can see, and not narrowly.
+Three properties decide it rather than the margins themselves:
+
+1. **Gravity leaves the revolute joints entirely.** The palletizer's peak torque is 78%
+   gravity (F15), and gravity is also what makes OPEN-SAFETY-1 dangerous on it. SCARA moves
+   the whole gravity load onto one axis that can be specified for it (F18).
+2. **Resolution stops depending on reach.** No SCARA Jacobian column scales with the board
+   distance (F15 item 2), so the board can be placed for ergonomics and clearance rather
+   than pulled in to save resolution.
+3. **It fails loudly.** Every SCARA modelling error so far announced itself as absurd; the
+   palletizer's closed loops produced plausible wrong answers (F1, F6). That difference
+   continues into detail design, where most of the remaining work is.
+
+**Robust to the shared assumptions.** The comparison rests on an unvalidated mass model and
+on D14's accelerations derived on the palletizer, and F15 records why both biases run
+against SCARA, not for it. OPEN-D is the one open question that could still bite, and it
+bites SCARA less. The revolute joints need 0.213 N·m at 532 rpm, 2.5% of holding torque.
+The exposure is concentrated on the Z axis, which a lead or driver change can move and
+the palletizer's three loaded joints could not.
+
+**What SCARA costs, accepted with the decision:**
+
+- **The Z axis needs a fail-safe brake.** No self-locking screw is fast enough (F18), so a
+  power cut drops the carriage. OPEN-SAFETY-1 now lives on Z. The palletizer needed a
+  brake or counterbalance on its shoulder anyway, so this is a relocation, not a new cost.
+- **A dedicated serial axis spends half the motion budget on vertical hops** (F18).
+- **Z is the OPEN-D-critical joint**: 1.03 N·m at 862 rpm, a quarter of holding torque.
+
+**What carries over, and what does not.** The method decisions carry over unchanged. That
+covers the conventions (D2, D3), the gated, swept, worst-square evaluation (D5, D8, D9,
+D11), encoders on the output (D6), per-joint reduction (D15), the driver-current cap as a
+method (D10), and the 4 s cycle (D14). The palletizer's detail design is **moot**, not
+inherited: the loop constraints (D7), the column sized for its yaw stack (D13,
+D13-REOPENED), its yaw ratio (D16), and its torque-cap number (D17). The belt decisions
+(D4, D12) apply to SCARA's revolute joints as they stand, with F19's note that torque never
+asks for them there.
+
+**Now live, not decided here:**
+
+- F19's question: NEMA 23s on the revolute joints (43x headroom on 34s), which would roughly
+  halve the carriage the Z axis lifts.
+- The Z brake itself: type, holding torque, where it mounts.
+- SCARA's own cycle-time derivation. D14's accelerations are the palletizer's and D18 kept
+  them for fairness. Detail design is where to re-derive them.
+
+**Nothing is deleted.** The palletizer model, config and tests stay, and the comparison
+remains reproducible from `app.sweep`. Shelved means no further detail design, not removed.
+
+**What would reopen this:** a pull-out curve on which the Z axis fails the profile-level
+check with no lead, driver or voltage change that fixes it, or a Z brake that cannot be
+packaged. Either one is a Z-axis problem, and would reopen the Z drive before it reopened the
+architecture.
+
+## OPEN-D — narrowed by D20 to one number per joint. Updated 2026-09-25
+
+With the architecture chosen, OPEN-D no longer needs a whole torque-speed curve
+interpreted by judgement. It needs the curve to clear specific operating points, which
+`python -m app.pullout scara` derives from config (worst case over all 35 survivors, peak
+torque paired with peak speed):
+
+```
+joint           motor N.m    motor rpm    x2 margin
+q0_shoulder       0.213         532       0.426 N.m
+q1_forearm        0.213         532       0.426 N.m
+q2_lift           1.031         862       2.062 N.m
+```
+
+(`q2_lift` reads 1.031 N·m here against F18's 0.965 because the sweep takes the force from
+the full model's inverse dynamics at the configured acceleration, rather than from F18's
+hand formula. It is the larger figure, so it is the one to test against.)
+
+**Procedure in BENCH.md; data goes in `bench/` in the format of
+`bench/pullout_TEMPLATE.csv`; `python -m app.pullout scara <file>` gives the verdict.**
+Pairing peak torque with peak speed makes the check pessimistic, so a PASS on every
+row closes OPEN-D outright, and a FAIL calls for a profile-level check rather than a
+verdict.
+
+**Open for Evan: the pass margin.** The tool defaults to 2.0 (demand at most half of
+pull-out), the conservative end of stepper practice. A stepper that reaches pull-out loses
+sync and drops the load, it does not slow down, so the margin is not decoration. It is a
+command-line parameter until decided.

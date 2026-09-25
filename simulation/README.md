@@ -28,27 +28,28 @@ pipeline is MuJoCo MJCF with equality constraints throughout.
   changing anything; several entries record traps that produce plausible wrong answers.
 - **[CLAUDE.MD](CLAUDE.MD)** — project brief and working agreement.
 
-## The comparison
+## The comparison — decided: SCARA+Z (D20)
 
 Two candidates, same sweep box, same gates, same assumptions including the unvalidated
 ones. `python -m app.sweep palletizer` against `python -m app.sweep scara`. Full detail
-and caveats in F15.
+and caveats in F15; the decision and what it costs in D20.
 
 |  | palletizer (#6) | SCARA+Z (#8) |
 |---|---|---|
-| surviving geometries | 7 | 46 |
+| surviving geometries | 7 | **35** (46 before F17's joint limits) |
 | best worst-square resolution | 0.890 mm (17.8% of target) | **0.490 mm (9.8%)** |
-| peak revolute joint torque | 18.8–24.7 N·m | **1.6–3.4 N·m** |
+| peak revolute joint torque | 18.8–24.7 N·m | **1.9–4.8 N·m** |
 | of which gravity | 14.6–19.2 N·m | **exactly 0** |
-| worst belt tension vs allowable | 36–47% | **3–6%** |
-| prismatic lift force | n/a | 800 N — see F15, the shared 1:25 assumption is wrong for a linear axis |
+| worst belt tension vs allowable | 36–47% | **4–9%** |
+| Z axis motor torque | n/a | 1.03 N·m at 862 rpm, 32 mm lead ball screw (F18) — the OPEN-D-critical joint |
 
 These share an unvalidated mass model and are a *relative* comparison, not absolute
 numbers. Both will be superseded by bench data.
 
 ## Status
 
-Phase 1, in progress. Two architectures modelled; three descoped.
+Phase 1. Architecture chosen: **SCARA+Z (D20)**. The palletizer is shelved, not deleted.
+Next is the OPEN-D pull-out test on the single-joint rig — see [BENCH.md](BENCH.md).
 
 | Area | State |
 |---|---|
@@ -61,14 +62,17 @@ Phase 1, in progress. Two architectures modelled; three descoped.
 | `backends/hw_backend` | **empty** — single-joint rig parts on order |
 | Geometry + placement sweep | working, gated, runs either candidate |
 | Candidates #1, #5, #7 | **descoped**, not deferred — see D18 |
+| Palletizer (#6) | **shelved** by D20 — still builds, sweeps and tests |
+| OPEN-D bench target + verdict | `python -m app.pullout scara [curve.csv]` — see BENCH.md |
 
 31 values in `config/palletizer.yaml` are still tagged `!placeholder`. They are marked at
 the value in YAML and enumerated by `python -m app.show_config palletizer`. Nothing
 silently invents a link length, ratio, or limit.
 
-## Architecture under evaluation
+## The shelved candidate: palletizer (#6)
 
-Candidate #6, parallelogram palletizer. 3 DOF: base yaw plus two grounded planar drives
+Kept because the comparison should stay reproducible, and because its loop machinery is
+what any future closed-chain candidate would reuse. Candidate #6, parallelogram palletizer. 3 DOF: base yaw plus two grounded planar drives
 on the rotating base. The tool is held level by geometry through **two chained levelling
 parallelograms** — one is not enough, because the only constant-angle reference available
 is the rotating base, so the elbow yoke must be levelled off the base before the tool
@@ -168,14 +172,14 @@ wrong answers rather than obvious failures:
 
 ## Open items
 
-- **OPEN-D — BLOCKING.** Motor torque is modelled as speed-independent. It is not, and the
-  4 s cycle needs 533 rpm at 1:25 and 845 at 1:40, where a NEMA 34 of this class is well
-  down its curve. Every torque and tension result here is an upper bound until a
-  34HS1456 torque-speed curve exists.
+- **OPEN-D — BLOCKING.** Motor torque is modelled as speed-independent. It is not. Narrowed
+  by D20 to a bench target: ≥ 0.43 N·m at 532 rpm on the revolute joints and **≥ 2.06 N·m
+  at 862 rpm on Z** (2x margin, `python -m app.pullout scara`). Procedure in BENCH.md.
 - **OPEN-E** — the yaw stack does not fit the 200 mm column above 1:25. Growing it to
   244 mm buys yaw 1:40 and takes the binding gate from 89% of budget to 56%. Blocked on
   OPEN-D, which the higher motor speed makes worse.
-- **OPEN-SAFETY-1** — belt reduction is backdrivable and there is no brake, so cutting
-  motor power drops the arm. Does not block the sim; blocks powered hardware.
+- **OPEN-SAFETY-1** — with SCARA it moves to the Z axis: the 32 mm ball screw is
+  backdrivable, so a power cut drops the carriage. Needs a fail-safe brake (F18, D20).
+  Does not block the sim; blocks powered hardware.
 
 *(OPEN-B closed by D12, GT3-5M final stage. OPEN-C closed by D13, 200 mm column.)*
