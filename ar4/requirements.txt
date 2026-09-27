@@ -4,3 +4,6 @@ mujoco>=3.0          # backends/sim.py and the sim tests
 pyserial>=3.5        # backends/hw.py, only when a real port is opened
 svgelements>=1.9     # motion/draw.py load_svg
 pytest>=8
+# tools/setup_env.py -> populate_meshes: three MK5 STLs exceed MuJoCo's face limit
+trimesh>=4
+fast-simplification>=0.1

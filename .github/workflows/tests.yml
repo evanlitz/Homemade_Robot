@@ -1,0 +1,39 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 3.12: simulation/requirements.txt pins numpy 2.5.1 (needs >= 3.12), and
+      # ar4-hmi ships its compiled FK oracle for 3.11 and 3.12 on x86-64 Linux.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -r simulation/requirements.txt -r ar4/requirements.txt
+
+      - name: simulation tests
+        working-directory: simulation
+        run: |
+          python -m pytest -q
+          python -m app.smoke_test
+          python -m app.build_palletizer
+          python -m app.build_scara
+
+      # Clones Annin's driver fork and HMI beside the repo at pinned commits and
+      # generates the meshes, so no ar4 test skips.
+      - name: ar4 reference checkouts and meshes
+        working-directory: ar4
+        run: python tools/setup_env.py
+
+      - name: ar4 tests
+        working-directory: ar4
+        run: python -m pytest -q -rs
