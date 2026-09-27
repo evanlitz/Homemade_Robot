@@ -23,11 +23,12 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from backends.sim import SimBackend
+from arm import add_arm_args, open_arm
 from motion.kinematics import grasp_pose
 from motion.ik import ik_multistart
-from motion.trajectory import Trajectory, plan_path
+from motion.trajectory import plan_path
 
 SQUARE_MM = 57.0
 # Jaw yaw. NOT zero, and that is not cosmetic: with the jaws square to the
@@ -66,35 +67,10 @@ def sequence():
 
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("--port", help="Teensy serial port; omit for the simulator")
-    p.add_argument("--gripper-port", help="Arduino Nano serial port for the SG1")
-    p.add_argument("--home", action="store_true",
-                   help="run limit-switch homing first (needed after power-on)")
+    add_arm_args(p)
     p.add_argument("--laps", type=int, default=None,
                    help="stop after this many laps (hardware default 1)")
     return p.parse_args()
-
-
-def open_arm(args):
-    if args.port is None:
-        model = str(Path(__file__).resolve().parents[1] / "models" / "ar4.xml")
-        arm = SimBackend(model_path=model, render=True, realtime=True)
-        arm.connect()
-        print("viewer open -- close the window to stop")
-        return arm, None
-
-    from backends.hw import HwBackend, required_slowdown
-    arm = HwBackend(port=args.port, gripper_port=args.gripper_port,
-                    assume_calibrated=not args.home)
-    arm.connect()
-    if args.home:
-        print("homing -- the arm will move to every limit switch")
-        arm.calibrate()
-
-    def fit(traj):
-        # stretch time, not the path: same waypoints, larger dt
-        return Trajectory(traj.q, traj.dt * required_slowdown(traj.q, traj.dt))
-    return arm, fit
 
 
 def main():
@@ -105,7 +81,7 @@ def main():
     if home is None:
         sys.exit("home pose is unreachable -- check BOARD_X against the envelope")
 
-    arm, fit = open_arm(args)
+    arm, fit = open_arm(args.port, args.gripper_port, args.home)
     laps = args.laps if args.laps is not None else (None if fit is None else 1)
 
     def running():

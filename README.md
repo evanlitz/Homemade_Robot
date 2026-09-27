@@ -10,8 +10,11 @@ The immediate target task is moving chess pieces on a tournament board: 57 mm sq
 | Directory | Contents |
 |---|---|
 | [`simulation/`](simulation/) | MuJoCo simulation harness, motion layer (FK/IK/limits), architecture comparison. Python. |
+| [`ar4/`](ar4/) | Control stack for an Annin AR4 MK5: kinematics, planning, pen drawing, MuJoCo and Teensy backends. Python. |
 
 ## Where to start
+
+- [`ar4/README.md`](ar4/README.md) — the AR4 MK5 stack, and drawing with it
 
 - [`simulation/README.md`](simulation/README.md) — what the simulation does and its current state
 - [`simulation/RUNNING.md`](simulation/RUNNING.md) — setup and every command

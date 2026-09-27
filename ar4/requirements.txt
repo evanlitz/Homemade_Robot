@@ -1,0 +1,6 @@
+# ar4/ control stack. Minimum versions, not pins: these are what it was tested on.
+numpy>=2.0
+mujoco>=3.0          # backends/sim.py and the sim tests
+pyserial>=3.5        # backends/hw.py, only when a real port is opened
+svgelements>=1.9     # motion/draw.py load_svg
+pytest>=8
