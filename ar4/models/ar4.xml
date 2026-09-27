@@ -89,7 +89,7 @@
              the backends speaks the DH convention from kinematics.cpp, so the
              model matches that and qpos[i] == the J1..J6 the solver produces.
              Joints 2-6 need no such correction. See tests/test_sim_model.py. -->
-        <joint name="joint_1" axis="0 0 -1" range="-2.96706 2.96706"/>
+        <joint name="joint_1" axis="0 0 -1" range="-2.79253 2.79253"/>
         <geom mesh="l1_aluminum"/>
         <geom mesh="l1_motor"/>
 

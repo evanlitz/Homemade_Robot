@@ -24,9 +24,12 @@ DHM = (
     (-np.pi / 2, 0.0,   np.pi,      41.0),
 )
 
-# degrees, (lower, upper)
+# degrees, (lower, upper). The MK5's: identical to the MK3 except J1, which
+# the MK5's hall-effect homing narrows to +/-160 (Annin-Robotics/ar4_ros_driver,
+# annin_ar4_description/config/mk5.yaml and the MK5 limits in AR4_teensy.ino).
+# The link geometry is the same on both, so nothing else here changes.
 JOINT_LIMITS = (
-    (-170.0, 170.0),
+    (-160.0, 160.0),
     (-42.0,  90.0),
     (-89.0,  52.0),
     (-180.0, 180.0),
@@ -82,19 +85,50 @@ TOOL_INV = np.eye(4)
 TOOL_INV[2, 3] = -TOOL_MM / 1000.0
 
 
+def axial_tool(length_mm):
+    """Tool frame `length_mm` out along the flange's approach axis (+z6).
+
+    A pen held in the SG1's jaws is this, with length = TOOL_MM plus however
+    far the tip sticks out past the fingertips. The length does not need to be
+    exact for drawing: touching the page off with the same tool puts any
+    axial error into the page height, where it cancels (see motion.draw.Page).
+    """
+    t = np.eye(4)
+    t[2, 3] = length_mm / 1000.0
+    return t
+
+
+def tool_matrix(tool):
+    """None for the flange, else the 4x4 flange->tool transform.
+
+    `tool` is False/None (flange), True (the SG1 fingertip, TOOL), or any 4x4
+    such as axial_tool(...). Accepting a matrix lets every caller that already
+    threads `tool=` through -- ik, plan_line -- aim a pen without changes.
+    """
+    if tool is None or tool is False:
+        return None
+    if tool is True:
+        return TOOL
+    t = np.asarray(tool, dtype=float)
+    if t.shape != (4, 4):
+        raise ValueError(f"tool must be a bool or a 4x4 transform, got shape {t.shape}")
+    return t
+
+
 def fk(q_deg, upto=6, tool=False):
     """Forward kinematics. Angles in degrees, returns 4x4 pose in metres.
 
     tool=False gives the flange, which is what the Annin oracle computes and
     what every existing test compares against -- do not change that default.
     tool=True gives the fingertip frame, which is what a grasp actually aims at
-    and what app code should use.
+    and what app code should use. A 4x4 gives that tool frame instead.
     """
     m = np.eye(4)
     for i in range(upto):
         m = m @ link_transform(i, q_deg[i])
-    if tool and upto == 6:
-        m = m @ TOOL
+    t = tool_matrix(tool)
+    if t is not None and upto == 6:
+        m = m @ t
     return m
 
 

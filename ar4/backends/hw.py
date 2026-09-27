@@ -5,6 +5,13 @@ Speaks the serial protocol of the ar4_ros_driver firmware
 the Arduino Nano sketch beside it (AR4_nano, 0.1.0). Every line is ASCII and
 ends in "\\n"; joints are lettered A..F.
 
+For an MK5, flash the sketch from Annin-Robotics/ar4_ros_driver, NOT from
+ycheng517's upstream: both report 2.1.0 and speak the same protocol, but only
+Annin's fork accepts model "mk5" (upstream stops at mk3, and a model it does
+not know sends the firmware into its unrecoverable error state). Annin's fork
+also adds PK (park) and JM (home selected joints), which this backend does not
+need.
+
     host -> Teensy                          Teensy -> host
     STA<version>B<model>   handshake        STA<ok>B<version>C<ok>D<model>
     JC<type><order x6>     home to limits   JCA..F<encoder counts>, or ER...
@@ -25,9 +32,10 @@ records and test_sim_model.test_j1_sign_is_not_the_urdf_one guards. So
 
     dh = SIGN * (fw + OFFSET)          fw = SIGN * dh - OFFSET
 
-The offsets below are upstream's joint_offsets/mk3.yaml. They are what makes
-the numbers mean anything, and they have NOT been checked on this arm: see
-the bring-up list at the bottom of this file before the first powered move.
+The offsets below are the fork's joint_offsets/<model>.yaml. They are what
+makes the numbers mean anything, and they have NOT been checked on this arm:
+see the bring-up list at the bottom of this file before the first powered
+move.
 """
 import re
 import time
@@ -41,8 +49,14 @@ FIRMWARE_VERSION = "2.1.0"
 NANO_VERSION = "0.1.0"
 BAUD = 115200
 
-# firmware limit-switch frame -> URDF, degrees; joint_offsets/mk3.yaml
-JOINT_OFFSETS_DEG = (170.0, -42.0, -89.0, -180.0, -105.0, -180.0)
+# firmware limit-switch frame -> URDF, degrees; joint_offsets/<model>.yaml.
+# The MK5 differs only on J1, whose travel is +/-160 rather than +/-170.
+JOINT_OFFSETS_BY_MODEL = {
+    "mk3": (170.0, -42.0, -89.0, -180.0, -105.0, -180.0),
+    "mk5": (160.0, -42.0, -89.0, -180.0, -105.0, -180.0),
+}
+DEFAULT_MODEL = "mk5"
+JOINT_OFFSETS_DEG = JOINT_OFFSETS_BY_MODEL[DEFAULT_MODEL]
 # URDF -> DH. Only J1 differs; see the module docstring.
 JOINT_SIGNS = (-1.0, 1.0, 1.0, 1.0, 1.0, 1.0)
 
@@ -162,8 +176,8 @@ class HwBackend(Backend):
     when the Teensy has stayed powered since it last homed.
     """
 
-    def __init__(self, port=None, gripper_port=None, model="mk3",
-                 firmware_version=FIRMWARE_VERSION, offsets_deg=JOINT_OFFSETS_DEG,
+    def __init__(self, port=None, gripper_port=None, model=DEFAULT_MODEL,
+                 firmware_version=FIRMWARE_VERSION, offsets_deg=None,
                  signs=JOINT_SIGNS, assume_calibrated=False,
                  transport=None, gripper_transport=None,
                  clock=time.monotonic, sleep=time.sleep,
@@ -172,6 +186,11 @@ class HwBackend(Backend):
         self.gripper_port = gripper_port
         self.model = model
         self.firmware_version = firmware_version
+        if offsets_deg is None:
+            if model not in JOINT_OFFSETS_BY_MODEL:
+                raise ValueError(f"no joint offsets known for {model!r}; pass "
+                                 f"offsets_deg from joint_offsets/{model}.yaml")
+            offsets_deg = JOINT_OFFSETS_BY_MODEL[model]
         self.offsets = np.asarray(offsets_deg, dtype=float)
         self.signs = np.asarray(signs, dtype=float)
         self.calibrated = bool(assume_calibrated)
@@ -439,7 +458,8 @@ class HwBackend(Backend):
 # Nothing in this file has driven a real arm yet. In this order, e-stop in
 # hand, before trusting it with a trajectory:
 #
-# 1. Flash AR4_teensy 2.1.0 (and AR4_nano 0.1.0). connect() and nothing else;
+# 1. Flash AR4_teensy 2.1.0 from Annin-Robotics/ar4_ros_driver (and
+#    AR4_nano 0.1.0). connect() and nothing else;
 #    a version or model mismatch fails here, before any motion.
 # 2. calibrate(). Watch every joint reach its switch and come back.
 # 3. get_joints() with the arm at rest after homing. Upstream parks it at

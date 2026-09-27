@@ -71,7 +71,7 @@ def test_parse_values_rejects_missing_joint():
 
 def test_handshake_sends_version_and_model():
     arm, teensy, nano, _ = make(homed=False)
-    assert teensy.sent[0] == "STA2.1.0Bmk3\n"
+    assert teensy.sent[0] == "STA2.1.0Bmk5\n"
     assert nano.sent[0] == "ST"
     assert arm.connected
 
@@ -85,10 +85,26 @@ def test_version_mismatch_fails_before_anything_moves():
     assert len(teensy.sent) == 1
 
 
+def test_mk3_uses_its_own_offsets():
+    """The two models differ on J1's offset; homed-park must still read zero."""
+    clock = FakeClock()
+    arm = HwBackend(transport=FakeTeensy(clock, model="mk3"), model="mk3",
+                    clock=clock, sleep=clock.sleep)
+    arm.connect()
+    arm.calibrate()
+    assert np.allclose(arm.get_joints(), 0.0, atol=1e-6)
+    assert arm.offsets[0] == 170.0
+
+
 def test_unknown_model_fails():
+    # no offsets for it here: refused before a port is touched
+    with pytest.raises(ValueError, match="mk9"):
+        HwBackend(transport=object(), model="mk9")
+    # offsets supplied, but the firmware does not know it either -- e.g. an
+    # mk5 sent to ycheng517's upstream sketch, which stops at mk3
     clock = FakeClock()
     arm = HwBackend(transport=FakeTeensy(clock), model="mk9",
-                    clock=clock, sleep=clock.sleep)
+                    offsets_deg=(0.0,) * 6, clock=clock, sleep=clock.sleep)
     with pytest.raises(HardwareError, match="model"):
         arm.connect()
 

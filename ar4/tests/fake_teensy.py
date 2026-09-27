@@ -13,8 +13,8 @@ motion rules, nothing more.
 """
 import numpy as np
 
-from backends.hw import (FIRMWARE_VERSION, FW_MAX_ACCEL_DEG_S2,
-                         FW_MAX_SPEED_DEG_S, JOINT_OFFSETS_DEG, NANO_VERSION)
+from backends.hw import (DEFAULT_MODEL, FIRMWARE_VERSION, FW_MAX_ACCEL_DEG_S2,
+                         FW_MAX_SPEED_DEG_S, JOINT_OFFSETS_BY_MODEL, NANO_VERSION)
 
 
 class FakeClock:
@@ -31,7 +31,7 @@ class FakeClock:
 class FakeTeensy:
     SUBSTEP = 0.001
 
-    def __init__(self, clock, fw_deg=None, model="mk3",
+    def __init__(self, clock, fw_deg=None, model=DEFAULT_MODEL,
                  version=FIRMWARE_VERSION):
         self.clock = clock
         self.model_ok = model
@@ -105,7 +105,7 @@ class FakeTeensy:
             self._out.append(f"ES{int(self.estop)}")
         elif cmd == "JC":
             # homed, then parked where the URDF reads ~zero
-            self.p = -np.asarray(JOINT_OFFSETS_DEG, float)
+            self.p = -np.asarray(JOINT_OFFSETS_BY_MODEL[self.model_ok], float)
             self.v[:] = 0.0
             self.mode, self.target = "pos", self.p.copy()
             self._out.append("JCA0B0C0D0E0F0")
