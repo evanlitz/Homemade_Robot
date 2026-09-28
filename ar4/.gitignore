@@ -9,3 +9,7 @@ models/meshes/
 # assistant scratch, never commit
 CLAUDE.md
 .claude/
+
+# tools/bringup.py output
+bringup-*.json
+bringup-tracking.csv

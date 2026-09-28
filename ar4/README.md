@@ -57,5 +57,16 @@ python tools/draw.py art.svg --page page.json --port COM5 --gripper-port COM6 --
 accept `mk5`. The stock firmware limits every joint to 60°/s and 30°/s², so
 trajectories are slowed to fit before they are sent.
 
-**It has not driven a real arm yet.** Work through the bring-up list at the
-bottom of `backends/hw.py`, e-stop in hand, before the first powered move.
+**It has not driven a real arm yet.** The first powered session is
+`tools/bringup.py`, e-stop in hand:
+
+```
+python tools/bringup.py --rehearse                      # practise, nothing attached
+python tools/bringup.py --port COM5 --gripper-port COM6
+```
+
+It connects, homes, checks every joint reads ~0 at park (a wrong offset), jogs
+each joint 10° while telling you where the fingertip should go (a wrong sign),
+measures tracking lag on a short line at several gains, and tests the gripper.
+It stops at the first failure and writes `bringup-<date>.json` with the exact
+edits to `backends/hw.py` it calls for.

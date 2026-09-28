@@ -455,8 +455,10 @@ class HwBackend(Backend):
 
 # --- first power-up ------------------------------------------------------
 #
-# Nothing in this file has driven a real arm yet. In this order, e-stop in
-# hand, before trusting it with a trajectory:
+# Nothing in this file has driven a real arm yet. tools/bringup.py walks
+# through these steps interactively and writes down what to change; the list
+# is kept here so the reasoning stays next to the code it checks. In this
+# order, e-stop in hand, before trusting it with a trajectory:
 #
 # 1. Flash AR4_teensy 2.1.0 from Annin-Robotics/ar4_ros_driver (and
 #    AR4_nano 0.1.0). connect() and nothing else;
