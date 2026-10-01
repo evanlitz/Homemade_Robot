@@ -62,6 +62,7 @@ trajectories are slowed to fit before they are sent.
 
 ```
 python tools/bringup.py --rehearse                      # practise, nothing attached
+python tools/bringup.py --port COM5 --connect-only      # USB link only, no motion
 python tools/bringup.py --port COM5 --gripper-port COM6
 ```
 

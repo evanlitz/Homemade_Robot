@@ -8,6 +8,7 @@ Every step either passes, or stops and says what to change. Nothing moves
 without a prompt first, and 'q' at any prompt stops the session cleanly.
 
     1. connect    firmware version and model handshake; no motion
+                  (--connect-only stops here: the first thing to run)
     2. home       limit-switch calibration -- every joint moves to its switch
     3. park       after homing the MK5 firmware parks at DH zero, so every
                   joint must read ~0; a joint that does not has a wrong offset
@@ -268,12 +269,14 @@ class Bringup:
             json.dump(self.report, f, indent=2)
         return path
 
-    def run(self, fit, gripper=False):
+    def run(self, fit, gripper=False, connect_only=False):
         steps = [("connect", self.connect), ("home", self.home),
                  ("park", self.park), ("direction", self.directions),
                  ("tracking", lambda: self.tracking(fit))]
         if gripper:
             steps.append(("gripper", self.gripper))
+        if connect_only:
+            steps = steps[:1]
         try:
             for name, step in steps:
                 self.log(f"\n=== {name} ===")
@@ -313,6 +316,8 @@ def main(argv=None):
     p.add_argument("--model", default="mk5")
     p.add_argument("--gains", default=",".join(f"{g:g}" for g in DEFAULT_GAINS),
                    help="tracking gains to compare, comma-separated")
+    p.add_argument("--connect-only", action="store_true",
+                   help="handshake and stop: proves the USB link, moves nothing")
     p.add_argument("--rehearse", action="store_true",
                    help="run against a simulated Teensy; nothing is attached")
     args = p.parse_args(argv)
@@ -335,7 +340,8 @@ def main(argv=None):
         return Trajectory(traj.q, traj.dt * required_slowdown(traj.q, traj.dt))
 
     gains = [float(g) for g in args.gains.split(",") if g]
-    report = Bringup(arm, gains=gains).run(fit, gripper=gripper)
+    report = Bringup(arm, gains=gains).run(fit, gripper=gripper,
+                                           connect_only=args.connect_only)
     return 0 if report["result"] == "passed" else 1
 
 

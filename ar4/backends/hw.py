@@ -89,6 +89,9 @@ SERVO_CLOSED_DEG = 0
 SERVO_OPEN_DEG = 35
 GRIPPER_WAIT_S = 0.6
 
+# Handshake attempts before giving up, one second apart.
+HANDSHAKE_TRIES = 5
+
 # JC drives every joint to its switch and back; the firmware's own timeouts
 # add up to ~46 s for a single group.
 CALIBRATE_TIMEOUT_S = 180.0
@@ -252,8 +255,7 @@ class HwBackend(Backend):
         if self._grip_io is None and self.gripper_port is not None:
             self._grip_io = _open_serial(self.gripper_port, BAUD)
 
-        line = self._exchange(self._io,
-                              f"STA{self.firmware_version}B{self.model}\n")
+        line = self._handshake()
         m = _ST_REPLY.match(line)
         if not m:
             raise HardwareError(f"unexpected handshake reply {line!r}")
@@ -271,6 +273,32 @@ class HwBackend(Backend):
                 raise HardwareError(f"gripper firmware is {ver!r}, expected "
                                     f"{NANO_VERSION}")
         self.connected = True
+
+    def _handshake(self, tries=HANDSHAKE_TRIES):
+        """Send ST until the firmware answers, like ar4_ros_driver does.
+
+        ONLY ST is ever resent. The firmware treats any other first line --
+        even a bare newline -- as a protocol violation and drops into an error
+        state that only a reset clears, so this must not "wake it up" with
+        anything else. Stale bytes from an earlier session are discarded
+        first so they cannot be mistaken for the reply.
+        """
+        if hasattr(self._io, "reset_input_buffer"):
+            self._io.reset_input_buffer()
+        msg = f"STA{self.firmware_version}B{self.model}\n"
+        for attempt in range(tries):
+            try:
+                return self._exchange(self._io, msg)
+            except HardwareError as exc:
+                if "Unrecoverable" in str(exc):
+                    raise HardwareError(
+                        "the Teensy is in its error state from an earlier bad "
+                        "message; press its reset button or power-cycle it, "
+                        "then connect again") from None
+                if "timed out" not in str(exc) or attempt == tries - 1:
+                    raise
+                self._sleep(1.0)
+        raise AssertionError("unreachable")
 
     def disconnect(self):
         for io in (self._io, self._grip_io):

@@ -109,6 +109,34 @@ def test_unknown_model_fails():
         arm.connect()
 
 
+def test_handshake_retries_a_lost_reply_and_only_ever_sends_st():
+    class Deaf(FakeTeensy):
+        """Misses the first two handshakes, as a Teensy still booting does."""
+        missed = 0
+
+        def write(self, data):
+            if self.missed < 2:
+                self.missed += 1
+                self.sent.append(data.decode())
+                return
+            super().write(data)
+    clock = FakeClock()
+    teensy = Deaf(clock)
+    arm = HwBackend(transport=teensy, clock=clock, sleep=clock.sleep)
+    arm.connect()
+    assert arm.connected
+    assert teensy.sent == ["STA2.1.0Bmk5\n"] * 3
+
+
+def test_error_state_says_to_reset_the_teensy():
+    clock = FakeClock()
+    teensy = FakeTeensy(clock)
+    teensy.inject = ["ER: Unrecoverable error state entered. Please reset."]
+    arm = HwBackend(transport=teensy, clock=clock, sleep=clock.sleep)
+    with pytest.raises(HardwareError, match="reset button"):
+        arm.connect()
+
+
 def test_motion_refused_until_homed():
     arm, teensy, *_ = make(homed=False)
     with pytest.raises(HardwareError, match="not homed"):
