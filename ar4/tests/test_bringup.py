@@ -112,6 +112,16 @@ def test_predictions_match_the_conventions():
     assert "flange" in bringup.describe_jog(wrist, 5)
 
 
+def test_connect_only_moves_nothing(tmp_path):
+    arm = bringup.rehearsal_arm()
+    teensy = arm._io
+    session = bringup.Bringup(arm, ask=answers(), log=lambda *_: None, out_dir=tmp_path)
+    report = session.run(fit, connect_only=True)
+    assert report["result"] == "passed"
+    assert list(report["steps"]) == ["connect"]
+    assert teensy.sent == ["STA2.1.0Bmk5\n"]
+
+
 def test_main_needs_a_port_or_rehearse():
     with pytest.raises(SystemExit):
         bringup.main([])
